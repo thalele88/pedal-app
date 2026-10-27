@@ -4,6 +4,8 @@
 
 #include "dsp/SignalChain.h"
 #include "dsp/TestInputPlayer.h"
+#include "dsp/Tuner.h"
+#include "ui/SessionPresets.h"
 
 namespace ParamIDs
 {
@@ -62,6 +64,15 @@ public:
     // 0..1 share of the audio callback time used by this plugin.
     double getCpuLoad() const { return loadMeasurer.getLoadAsProportion(); }
 
+    // Input signal for the tuner screen (filled only while the tuner is open).
+    pedal::TunerInput& getTuner() noexcept { return tuner; }
+    // Silences the output, e.g. while tuning on stage. Fades in 20 ms.
+    void setOutputMuted (bool shouldMute) noexcept { outputMuted.store (shouldMute); }
+    bool isOutputMuted() const noexcept { return outputMuted.load(); }
+
+    // The preset list shown by the browser and the stage mode.
+    pedal::ui::PresetSource& getPresetSource() noexcept { return sessionPresets; }
+
     juce::AudioProcessorValueTreeState parameters;
 
 private:
@@ -73,6 +84,10 @@ private:
     pedal::TestInputPlayer testInput;
     juce::AudioProcessLoadMeasurer loadMeasurer;
     juce::ThreadPool loaderPool { 1 };
+    pedal::TunerInput tuner;
+    std::atomic<bool> outputMuted { false };
+    juce::SmoothedValue<float> muteGain { 1.0f };
+    pedal::ui::SessionPresets sessionPresets { *this, [this] { return getAmpModelName(); } };
 
     juce::File ampModelFile, cabinetFile;
     // Lets callbacks posted by the loader know the processor is gone.

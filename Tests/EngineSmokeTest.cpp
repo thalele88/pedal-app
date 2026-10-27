@@ -3,6 +3,7 @@
 
 #include "dsp/SignalChain.h"
 #include "dsp/TestInputPlayer.h"
+#include "dsp/Tuner.h"
 
 #include <chrono>
 #include <cstdio>
@@ -32,6 +33,41 @@ void fillTestSignal (juce::AudioBuffer<float>& buffer, double sampleRate, int64_
         buffer.setSample (0, i, (float) (0.1 * envelope * v));
     }
     position += buffer.getNumSamples();
+}
+// Feeds a plucked-string-like tone through the tuner path and returns the
+// detected offset in cents from the expected note (or 1000 if it found none).
+float tunerErrorCents (double sampleRate, float hz, int expectedMidiNote)
+{
+    pedal::TunerInput input;
+    input.prepare (sampleRate);
+    input.setActive (true);
+
+    // Fundamental plus a strong 2nd and 3rd harmonic, like a real string.
+    juce::AudioBuffer<float> block (1, 256);
+    int64_t position = 0;
+    for (int b = 0; b < (int) (0.25 * sampleRate) / 256; ++b)
+    {
+        for (int i = 0; i < 256; ++i)
+        {
+            const double t = (double) (position + i) / sampleRate;
+            const double w = juce::MathConstants<double>::twoPi * hz * t;
+            block.setSample (0, i, (float) (0.2 * std::sin (w) + 0.25 * std::sin (2.0 * w) + 0.1 * std::sin (3.0 * w)));
+        }
+        position += 256;
+        input.push (block.getReadPointer (0), 256);
+    }
+
+    std::vector<float> history (2048), scratch (8192), work (2048);
+    const int n = input.pull (scratch.data(), (int) scratch.size());
+    if (n < (int) history.size())
+        return 1000.0f;
+    std::copy (scratch.begin() + n - (int) history.size(), scratch.begin() + n, history.begin());
+
+    const float detected = pedal::PitchDetector::detect (history.data(), (int) history.size(), input.getOutputSampleRate(), work.data());
+    const auto reading = pedal::NoteReading::fromFrequency (detected);
+    if (reading.midiNote != expectedMidiNote)
+        return 1000.0f;
+    return reading.cents;
 }
 } // namespace
 
@@ -114,6 +150,28 @@ int main()
         check (diPeak > 1.0e-4, "DI test input produces sound");
         check (channelsMatch, "DI test input fills every channel");
     }
+
+    // Tuner: low B of a 5-string bass up to the 24th fret of the high E string.
+    // Open strings must read within 1 cent; high frets have fewer samples per
+    // period after decimation, so they get a little more room.
+    const struct { float hz; int midi; float tolerance; const char* name; } notes[] = {
+        { 30.87f, 23, 1.0f, "B0 (bass low B)" }, { 41.20f, 28, 1.0f, "E1 (bass low E)" }, { 82.41f, 40, 1.0f, "E2 (guitar low E)" },
+        { 110.0f, 45, 1.0f, "A2" }, { 146.83f, 50, 1.0f, "D3" }, { 329.63f, 64, 1.0f, "E4 (high E)" },
+        { 659.26f, 76, 3.0f, "E5 (12th fret harmonic)" }, { 987.77f, 83, 3.0f, "B5 (19th fret)" }
+    };
+    for (double rate : { 44100.0, 48000.0, 96000.0 })
+    {
+        for (const auto& note : notes)
+        {
+            const float cents = tunerErrorCents (rate, note.hz, note.midi);
+            const auto label = juce::String ("tuner ") + note.name + " @ " + juce::String (rate / 1000.0, 1) + " kHz: "
+                               + juce::String (cents, 2) + " cents";
+            check (std::abs (cents) < note.tolerance, label.toRawUTF8());
+        }
+    }
+    // A string 20 cents flat must read as flat, not as in tune.
+    const float flat = tunerErrorCents (48000.0, 82.41f * std::pow (2.0f, -20.0f / 1200.0f), 40);
+    check (flat < -17.0f && flat > -23.0f, ("tuner reads 20 cents flat as " + juce::String (flat, 1)).toRawUTF8());
 
     return failures == 0 ? 0 : 1;
 }

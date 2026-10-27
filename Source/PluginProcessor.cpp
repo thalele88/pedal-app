@@ -77,6 +77,9 @@ void PedalAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     chain.prepare (sampleRate, samplesPerBlock);
     testInput.prepare (sampleRate);
     loadMeasurer.reset (sampleRate, samplesPerBlock);
+    tuner.prepare (sampleRate);
+    muteGain.reset (sampleRate, 0.02);
+    muteGain.setCurrentAndTargetValue (outputMuted.load() ? 0.0f : 1.0f);
     updateLatency();
 }
 
@@ -99,7 +102,24 @@ void PedalAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     settings.cabEnabled = cabEnabled->load() > 0.5f;
 
     testInput.process (buffer);
+    tuner.push (buffer.getReadPointer (0), buffer.getNumSamples());
     chain.process (buffer, settings);
+
+    const bool muted = outputMuted.load();
+    muteGain.setTargetValue (muted ? 0.0f : 1.0f);
+    if (muteGain.isSmoothing())
+    {
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+        {
+            const float gain = muteGain.getNextValue();
+            for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                buffer.getWritePointer (ch)[i] *= gain;
+        }
+    }
+    else if (muted)
+    {
+        buffer.clear();
+    }
 }
 
 void PedalAudioProcessor::loadAmpModelAsync (const juce::File& file, std::function<void (juce::String)> onDone)

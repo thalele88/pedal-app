@@ -12,7 +12,7 @@ no áudio por troca atômica, como `pedal::AmpModel` já faz.
 | Pasta | O que tem |
 |---|---|
 | `Source/dsp/` | Motor de som, sem interface. `SignalChain` monta a cadeia; `AmpModel` guarda e troca a captura NAM; `DropTuner` faz o pitch shift. Compilado como a biblioteca `pedal_dsp`, usada pelo plugin e pelos testes. |
-| `Source/ui/` | Visual compartilhado (`PedalLookAndFeel`, paleta de cores). |
+| `Source/ui/` | Telas: `PresetBrowser` (lista à esquerda), `SignalChainView` + `BlockPanels` (cadeia clicável), `StageView` (modo palco), `TunerView` (afinador), `PedalLookAndFeel` (paleta). A UI só fala com os presets pela interface `PresetSource`. |
 | `Source/PluginProcessor.*` | Parâmetros (APVTS), estado salvo, ligação entre parâmetros e `SignalChain`. |
 | `Source/PluginEditor.*` | Tela principal. |
 | `Tests/` | Teste do motor sem interface (`EngineSmokeTest`). |
@@ -54,6 +54,13 @@ struct ToneRef
   (vai exigir vários slots no `AmpModel` ou um `AmpModel` por preset carregado).
 
 ### 3. Interface e modo palco (`Source/ui/`, branch `feat/stage-ui`)
+
+Feito na primeira versão: tudo da lista abaixo. A UI lê e troca presets só
+por `pedal::ui::PresetSource` (`Source/ui/PresetSource.h`); hoje o processor
+devolve `SessionPresets`, uma lista só em memória, e o `PresetManager` da frente 2
+passa a ser devolvido por `PedalAudioProcessor::getPresetSource()`.
+O afinador lê a entrada por `pedal::TunerInput` (FIFO sem lock, só ativo com a
+tela aberta) e detecta a nota fora da thread de áudio.
 
 - Navegador de presets à esquerda (ideia do ToneX).
 - Cadeia de blocos clicáveis, cada bloco abre seus controles (ideia da Neural DSP).

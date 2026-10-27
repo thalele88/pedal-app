@@ -3,12 +3,18 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "PluginProcessor.h"
+#include "ui/BlockPanels.h"
 #include "ui/PedalLookAndFeel.h"
+#include "ui/PresetBrowser.h"
+#include "ui/SignalChainView.h"
+#include "ui/StageView.h"
+#include "ui/TunerView.h"
 
-// First version of the main screen. Layout idea, top to bottom:
-//   header (name, loaded model, CPU)  ->  signal chain blocks  ->  big knobs  ->  drop tuning buttons
-// The chain strip follows the "pedalboard row" idea from Neural DSP plugins;
-// the preset browser (ToneX style) and the stage mode come in later steps.
+// Main screen. Layout:
+//   header (preset name, CPU, tuner and stage buttons)
+//   preset browser on the left (ToneX idea)  |  signal chain blocks (Neural DSP idea)
+//                                            |  controls of the selected block
+// The stage mode and the tuner open full screen on top of everything.
 class PedalAudioProcessorEditor : public juce::AudioProcessorEditor,
                                   private juce::Timer
 {
@@ -18,39 +24,35 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    bool keyPressed (const juce::KeyPress&) override;
 
 private:
-    struct Knob
-    {
-        juce::Slider slider { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow };
-        juce::Label label;
-        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
-    };
-
     void timerCallback() override;
-    void setupKnob (Knob&, const juce::String& paramId, const juce::String& name);
-    void chooseAmpModel();
-    void chooseCabinet();
-    void chooseTestInput();
-    void setDrop (int semitones);
+    void selectBlock (pedal::ui::BlockId);
+    void toggleBlock (pedal::ui::BlockId);
+    void updateChain();
+    void showStage (bool);
+    void showTuner (bool);
+    void showStatus (const juce::String&);
 
     PedalAudioProcessor& processor;
     pedal::ui::PedalLookAndFeel lookAndFeel;
 
-    juce::Label title, modelLabel, cpuLabel, statusLabel;
-    juce::TextButton ampButton { "AMP" }, cabButton { "CAIXA" };
-    juce::ToggleButton cabToggle { "Caixa ligada" };
-    juce::TextButton diFileButton { "Arquivo DI..." }, diPlayButton;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> cabAttachment;
+    juce::Label title, presetLabel, cpuLabel, statusLabel;
+    juce::TextButton tunerButton { "AFINADOR" }, stageButton { "PALCO" };
 
-    Knob inputKnob, gateKnob, blendKnob, outputKnob;
+    pedal::ui::PresetBrowser browser;
+    pedal::ui::SignalChainView chain;
+    std::unique_ptr<pedal::ui::BlockPanel> panel;
+    pedal::ui::StageView stage;
+    pedal::ui::TunerView tuner;
+    juce::TooltipWindow tooltips { this };
 
-    static constexpr int dropSteps[] = { 0, -1, -2, -3, -5, -7, -12 };
-    juce::OwnedArray<juce::TextButton> dropButtons;
-    juce::Label dropLabel;
-
-    juce::Rectangle<int> chainArea;
-    std::unique_ptr<juce::FileChooser> fileChooser;
+    // Values restored when a block is switched back on.
+    float gateWhenOn = -60.0f;
+    int dropWhenOn = -2;
+    int tick = 0;
+    bool presetModified = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PedalAudioProcessorEditor)
 };

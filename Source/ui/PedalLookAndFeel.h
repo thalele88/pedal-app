@@ -32,6 +32,15 @@ public:
         setColour (juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
         setColour (juce::Slider::textBoxTextColourId, Colours::text);
         setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+        setColour (juce::Slider::thumbColourId, Colours::accent);
+        setColour (juce::Slider::trackColourId, Colours::accent.withAlpha (0.6f));
+        setColour (juce::Slider::backgroundColourId, Colours::panelRaised);
+    }
+
+    // Bigger, bolder button text so labels stay readable on stage and on touch screens.
+    juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override
+    {
+        return juce::FontOptions (juce::jlimit (14.0f, 24.0f, (float) buttonHeight * 0.36f), juce::Font::bold);
     }
 
     void drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float pos,
