@@ -2,6 +2,7 @@
 // it produces sane audio fast enough for real time. Exit code 0 = pass.
 
 #include "dsp/SignalChain.h"
+#include "dsp/TestInputPlayer.h"
 
 #include <chrono>
 #include <cstdio>
@@ -90,6 +91,29 @@ int main()
 
     std::printf ("drop tuner latency: %d samples (%.1f ms)\n", chain.getDropTuner().getLatencySamples(),
                  1000.0 * chain.getDropTuner().getLatencySamples() / sampleRate);
+
+    // Test input: a 48 kHz WAV played at a 44.1 kHz host rate, looped.
+    {
+        pedal::TestInputPlayer player;
+        player.prepare (44100.0);
+        const auto diError = player.load (juce::File (PEDAL_EXAMPLE_AUDIO_DIR).getChildFile ("input.wav"));
+        check (diError.isEmpty(), ("load DI test file " + diError).toRawUTF8());
+        player.setPlaying (true);
+
+        juce::AudioBuffer<float> stereo (2, blockSize);
+        double diPeak = 0.0;
+        bool channelsMatch = true;
+        // 3 s of blocks: longer than the 2 s file, so it has to loop.
+        for (int b = 0; b < (int) (3.0 * 44100.0 / blockSize); ++b)
+        {
+            stereo.clear();
+            player.process (stereo);
+            diPeak = std::max (diPeak, (double) stereo.getMagnitude (0, 0, blockSize));
+            channelsMatch = channelsMatch && stereo.getSample (1, blockSize - 1) == stereo.getSample (0, blockSize - 1);
+        }
+        check (diPeak > 1.0e-4, "DI test input produces sound");
+        check (channelsMatch, "DI test input fills every channel");
+    }
 
     return failures == 0 ? 0 : 1;
 }

@@ -62,7 +62,8 @@ set_target_properties(nam_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(pedal_dsp STATIC
     Source/dsp/AmpModel.cpp
     Source/dsp/DropTuner.cpp
-    Source/dsp/SignalChain.cpp)
+    Source/dsp/SignalChain.cpp
+    Source/dsp/TestInputPlayer.cpp)
 target_include_directories(pedal_dsp PUBLIC Source)
 # NAM registers its model architectures from static initialisers, so the whole
 # archive must be linked or the linker drops them and every model fails to load.
@@ -113,7 +114,8 @@ if (PEDAL_BUILD_TESTS)
     juce_add_console_app(EngineSmokeTest PRODUCT_NAME "EngineSmokeTest")
     target_sources(EngineSmokeTest PRIVATE Tests/EngineSmokeTest.cpp)
     target_compile_definitions(EngineSmokeTest PRIVATE
-        PEDAL_EXAMPLE_MODELS_DIR="${nam_SOURCE_DIR}/example_models")
+        PEDAL_EXAMPLE_MODELS_DIR="${nam_SOURCE_DIR}/example_models"
+        PEDAL_EXAMPLE_AUDIO_DIR="${nam_SOURCE_DIR}/example_audio")
     target_link_libraries(EngineSmokeTest PRIVATE pedal_dsp
         juce::juce_recommended_config_flags)
     enable_testing()
