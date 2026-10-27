@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "PluginProcessor.h"
+#include "tone3000/Tone3000Panel.h"
 #include "ui/PedalLookAndFeel.h"
 
 // First version of the main screen. Layout idea, top to bottom:
@@ -32,13 +33,18 @@ private:
     void chooseAmpModel();
     void chooseCabinet();
     void chooseTestInput();
+    void toggleTone3000Panel();
+    void loadTone3000Model (const pedal::tone3000::Tone&, const pedal::tone3000::Model&);
     void setDrop (int semitones);
 
     PedalAudioProcessor& processor;
     pedal::ui::PedalLookAndFeel lookAndFeel;
 
-    juce::Label title, modelLabel, cpuLabel, statusLabel;
+    juce::Label title, modelLabel, cpuLabel, statusLabel, attributionLabel;
     juce::TextButton ampButton { "AMP" }, cabButton { "CAIXA" };
+    // Always on screen: TONE3000 asks integrations to keep a path to the catalog.
+    juce::TextButton tone3000Button { "TONE3000" };
+    pedal::tone3000::Tone3000Panel tone3000Panel;
     juce::ToggleButton cabToggle { "Caixa ligada" };
     juce::TextButton diFileButton { "Arquivo DI..." }, diPlayButton;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> cabAttachment;

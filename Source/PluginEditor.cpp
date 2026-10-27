@@ -3,7 +3,7 @@
 using namespace pedal::ui;
 
 PedalAudioProcessorEditor::PedalAudioProcessorEditor (PedalAudioProcessor& p)
-    : AudioProcessorEditor (&p), processor (p)
+    : AudioProcessorEditor (&p), processor (p), tone3000Panel (p.getTone3000())
 {
     setLookAndFeel (&lookAndFeel);
 
@@ -22,6 +22,22 @@ PedalAudioProcessorEditor::PedalAudioProcessorEditor (PedalAudioProcessor& p)
     statusLabel.setJustificationType (juce::Justification::centred);
     statusLabel.setColour (juce::Label::textColourId, Colours::warn);
     addAndMakeVisible (statusLabel);
+
+    attributionLabel.setJustificationType (juce::Justification::centred);
+    attributionLabel.setFont (juce::FontOptions (13.0f));
+    attributionLabel.setColour (juce::Label::textColourId, Colours::textDim);
+    addAndMakeVisible (attributionLabel);
+
+    tone3000Button.setTooltip ("Escolher capturas no TONE3000 sem sair do app");
+    tone3000Button.onClick = [this] { toggleTone3000Panel(); };
+    addAndMakeVisible (tone3000Button);
+
+    tone3000Panel.onModelChosen = [this] (const pedal::tone3000::Tone& tone, const pedal::tone3000::Model& model)
+    {
+        loadTone3000Model (tone, model);
+    };
+    tone3000Panel.onClose = [this] { toggleTone3000Panel(); };
+    addChildComponent (tone3000Panel);
 
     ampButton.onClick = [this] { chooseAmpModel(); };
     cabButton.onClick = [this] { chooseCabinet(); };
@@ -118,6 +134,35 @@ void PedalAudioProcessorEditor::chooseAmpModel()
     });
 }
 
+void PedalAudioProcessorEditor::toggleTone3000Panel()
+{
+    const bool show = ! tone3000Panel.isVisible();
+    tone3000Panel.setVisible (show);
+    tone3000Button.setToggleState (show, juce::dontSendNotification);
+    if (show)
+    {
+        tone3000Panel.toFront (false);
+        tone3000Panel.open();
+    }
+}
+
+void PedalAudioProcessorEditor::loadTone3000Model (const pedal::tone3000::Tone& tone, const pedal::tone3000::Model& model)
+{
+    PedalAudioProcessor::Tone3000Model ref;
+    ref.toneId = tone.id;
+    ref.modelId = model.id;
+    ref.name = model.name.isEmpty() || model.name == tone.title ? tone.title : tone.title + " - " + model.name;
+    ref.creator = tone.creator;
+
+    statusLabel.setText ("Baixando " + ref.name + "...", juce::dontSendNotification);
+    juce::Component::SafePointer<PedalAudioProcessorEditor> safeThis (this);
+    processor.loadTone3000ModelAsync (ref, [safeThis] (juce::String error)
+    {
+        if (safeThis != nullptr)
+            safeThis->statusLabel.setText (error, juce::dontSendNotification);
+    });
+}
+
 void PedalAudioProcessorEditor::chooseCabinet()
 {
     fileChooser = std::make_unique<juce::FileChooser> ("Escolha um IR de caixa", juce::File(), "*.wav;*.aif;*.aiff");
@@ -160,6 +205,12 @@ void PedalAudioProcessorEditor::timerCallback()
 
     if (processor.ampHasSampleRateMismatch() && statusLabel.getText().isEmpty())
         statusLabel.setText (juce::String::fromUTF8 ("Atenção: a captura foi feita em outra taxa de amostragem"), juce::dontSendNotification);
+
+    const auto t3kModel = processor.getTone3000Model();
+    attributionLabel.setText (! t3kModel.isEmpty() && name.isNotEmpty()
+                                  ? pedal::tone3000::Service::attribution (t3kModel.creator)
+                                  : juce::String(),
+                              juce::dontSendNotification);
 
     const auto cpu = processor.getCpuLoad();
     cpuLabel.setText ("CPU " + juce::String (juce::roundToInt (cpu * 100.0)) + "%", juce::dontSendNotification);
@@ -222,8 +273,18 @@ void PedalAudioProcessorEditor::resized()
     diPlayButton.setBounds (header.removeFromRight (110).reduced (4, 4));
     diFileButton.setBounds (header.removeFromRight (150).reduced (4, 4));
     modelLabel.setBounds (header);
+    {
+        // The amp's source row: TONE3000 button and the credit for the loaded tone.
+        auto row = area.removeFromTop (30);
+        tone3000Button.setBounds (row.removeFromRight (120).reduced (4, 2));
+        row.removeFromLeft (120); // keeps the credit centred under the model name
+        attributionLabel.setBounds (row);
+    }
 
     statusLabel.setBounds (area.removeFromTop (24));
+    // The TONE3000 screen covers the pedal controls but keeps the loaded
+    // capture, its credit and the download status in sight.
+    tone3000Panel.setBounds (area);
     area.removeFromTop (8);
 
     chainArea = area.removeFromTop (juce::jmax (90, area.getHeight() / 5));

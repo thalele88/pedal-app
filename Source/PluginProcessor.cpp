@@ -107,12 +107,52 @@ void PedalAudioProcessor::loadAmpModelAsync (const juce::File& file, std::functi
     loaderPool.addJob ([this, file, onDone, aliveFlag = alive]
     {
         auto error = chain.getAmp().load (file);
+        if (error.isEmpty())
+            tone3000.retainOffline ("current", {}); // the amp no longer needs a TONE3000 copy
+
         juce::MessageManager::callAsync ([this, file, error, onDone, aliveFlag]
         {
             if (! aliveFlag->load())
                 return;
             if (error.isEmpty())
+            {
                 ampModelFile = file;
+                tone3000Model = {};
+            }
+            if (onDone)
+                onDone (error);
+        });
+    });
+}
+
+void PedalAudioProcessor::loadTone3000ModelAsync (const Tone3000Model& model, std::function<void (juce::String)> onDone)
+{
+    loaderPool.addJob ([this, model, onDone, aliveFlag = alive]
+    {
+        // The current tone counts as a preset: it is what the plugin state
+        // restores, so it keeps an offline copy under the "current" owner.
+        juce::String json;
+        auto error = tone3000.fetchModelJson (model.toneId, model.modelId, json, "current");
+        if (error.isEmpty())
+            error = chain.getAmp().loadFromJson (json, model.name);
+        if (error.isEmpty())
+            tone3000.retainOffline ("current", { model.modelId });
+
+        juce::MessageManager::callAsync ([this, model, error, onDone, aliveFlag]
+        {
+            if (! aliveFlag->load())
+                return;
+            if (error.isEmpty())
+            {
+                tone3000Model = model;
+                ampModelFile = juce::File();
+            }
+            else if (! chain.getAmp().hasModel())
+            {
+                // Offline with no disk copy: keep the reference so saving the
+                // session does not forget the tone.
+                tone3000Model = model;
+            }
             if (onDone)
                 onDone (error);
         });
@@ -156,6 +196,10 @@ void PedalAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = parameters.copyState();
     state.setProperty ("ampModel", ampModelFile.getFullPathName(), nullptr);
+    state.setProperty ("t3kToneId", tone3000Model.toneId, nullptr);
+    state.setProperty ("t3kModelId", tone3000Model.modelId, nullptr);
+    state.setProperty ("t3kName", tone3000Model.name, nullptr);
+    state.setProperty ("t3kCreator", tone3000Model.creator, nullptr);
     state.setProperty ("cabinet", cabinetFile.getFullPathName(), nullptr);
     state.setProperty ("testInput", testInput.getFile().getFullPathName(), nullptr);
     if (auto xml = state.createXml())
@@ -171,8 +215,12 @@ void PedalAudioProcessor::setStateInformation (const void* data, int sizeInBytes
     auto state = juce::ValueTree::fromXml (*xml);
     parameters.replaceState (state);
 
+    const Tone3000Model t3k { state.getProperty ("t3kToneId").toString(), state.getProperty ("t3kModelId").toString(),
+                              state.getProperty ("t3kName").toString(), state.getProperty ("t3kCreator").toString() };
     const juce::File model (state.getProperty ("ampModel").toString());
-    if (model.existsAsFile())
+    if (! t3k.isEmpty())
+        loadTone3000ModelAsync (t3k);
+    else if (model.existsAsFile())
         loadAmpModelAsync (model);
 
     const juce::File cab (state.getProperty ("cabinet").toString());
