@@ -24,6 +24,23 @@ tocar ao vivo.
 - Medidor de CPU.
 - Formatos: Standalone e VST3 (Windows/Mac/Linux) e AU (Mac).
 
+## Baixar pronto (sem compilar)
+
+Cada PR e cada commit na `main` gera o app pronto para Windows, Mac e Linux:
+
+1. Abra a aba **Actions** do repositório (ou, no PR, clique em **Checks**) e
+   entre na execução mais recente do **Build** com ✓ verde.
+2. No fim da página, em **Artifacts**, baixe **PedalApp-Windows** (precisa estar
+   logado no GitHub).
+3. Descompacte o `.zip`:
+   - `Standalone/Pedal App.exe`: abre direto. Se o Windows mostrar "O Windows
+     protegeu o computador", clique em **Mais informações → Executar assim mesmo**
+     (o app não é assinado).
+   - `VST3/Pedal App.vst3`: copie a pasta para `C:\Program Files\Common Files\VST3`
+     para usar num DAW.
+
+Os arquivos ficam disponíveis por 30 dias em cada execução.
+
 ## Como compilar
 
 Precisa de **CMake 3.24+** e de um compilador C++20:
