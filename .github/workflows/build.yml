@@ -1,0 +1,44 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libfreetype-dev libfontconfig1-dev \
+            libxrandr-dev libxinerama-dev libxcursor-dev libxcomposite-dev libgl-dev ninja-build
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Engine smoke test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      # Ready-to-run builds, downloadable from the run's "Artifacts" section.
+      - name: Upload app and plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: PedalApp-${{ runner.os }}
+          path: |
+            build/PedalApp_artefacts/Release/Standalone
+            build/PedalApp_artefacts/Release/VST3
+          if-no-files-found: error
+          retention-days: 30
