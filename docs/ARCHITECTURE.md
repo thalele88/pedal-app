@@ -12,7 +12,7 @@ no áudio por troca atômica, como `pedal::AmpModel` já faz.
 | Pasta | O que tem |
 |---|---|
 | `Source/dsp/` | Motor de som, sem interface. `SignalChain` monta a cadeia; `AmpModel` guarda e troca a captura NAM; `DropTuner` faz o pitch shift. Compilado como a biblioteca `pedal_dsp`, usada pelo plugin e pelos testes. |
-| `Source/ui/` | Visual compartilhado (`PedalLookAndFeel`, paleta de cores). |
+| `Source/ui/` | Telas no estilo do plugin do TONE3000: `ChainView` (cards da cadeia), `BlockDetailView` (tela do bloco), `ControlStrip` (barra de baixo), `LevelMeter`, `HintBar`, `PresetBrowser`, `StageView` (modo palco), `TunerView` (afinador). A UI só fala com os presets por `PresetSource` e acha os parâmetros do pitch por ID em `PitchParams`. |
 | `Source/PluginProcessor.*` | Parâmetros (APVTS), estado salvo, ligação entre parâmetros e `SignalChain`. |
 | `Source/PluginEditor.*` | Tela principal. |
 | `Tests/` | Teste do motor sem interface (`EngineSmokeTest`). |
@@ -54,6 +54,18 @@ struct ToneRef
   (vai exigir vários slots no `AmpModel` ou um `AmpModel` por preset carregado).
 
 ### 3. Interface e modo palco (`Source/ui/`, branch `feat/stage-ui`)
+
+Feito na primeira versão: tudo da lista abaixo. A UI lê e troca presets só
+por `pedal::ui::PresetSource` (`Source/ui/PresetSource.h`); hoje o processor
+devolve `SessionPresets`, uma lista só em memória, e o `PresetManager` da frente 2
+passa a ser devolvido por `PedalAudioProcessor::getPresetSource()`.
+O afinador lê a entrada por `pedal::TunerInput` (FIFO sem lock, só ativo com a
+tela aberta) e detecta a nota fora da thread de áudio.
+O layout segue o plugin do próprio TONE3000 (cadeia em cards, barra de controles
+embaixo, medidores nos cantos, barra de dicas). A aba TONE3000 da lateral mostra
+o que `createTone3000View()` do editor devolver: hoje um placeholder, depois o
+`Tone3000Panel` da frente 1. O controle Pitch acha os parâmetros por ID
+(`PitchParams`), então funciona com o `drop` antigo e com os parâmetros novos da frente 4.
 
 - Navegador de presets à esquerda (ideia do ToneX).
 - Cadeia de blocos clicáveis, cada bloco abre seus controles (ideia da Neural DSP).

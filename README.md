@@ -78,7 +78,39 @@ rápido que tempo real.
    buffer de 64 ou 128 amostras.
 2. O JUCE silencia a entrada na primeira vez para evitar microfonia: desmarque
    "Mute audio input" na mesma tela.
-3. Clique em **AMP** para escolher um `.nam` e em **CAIXA** para escolher um IR.
+3. Na **cadeia de sinal**, toque no card **+ Adicionar amp** e escolha um `.nam`,
+   e em **+ Adicionar caixa** escolha um IR (ou arraste os arquivos para a janela).
+   Tocar num card já preenchido abre a tela do bloco, com setas para comparar as
+   outras capturas da mesma pasta.
+4. Na barra de baixo ficam os controles gerais: **Input**, **Gate**, **Pitch**
+   (o drop de afinação; clique com o botão direito ou em `•••` para os atalhos),
+   **Bass / Middle / Treble** e **Output**. Os botões de power desligam sem perder
+   o ajuste. Os medidores nos cantos mostram o nível de entrada e de saída, e a
+   barra de dicas no rodapé explica o que cada controle faz.
+5. Monte o som e toque no **+** do topo (ou em **Salvar como...**) para criar um preset.
+
+![Tela do bloco](docs/block.png)
+
+### Modo palco
+
+O botão **PALCO** abre a tela de show: nome do preset gigante, 4 ou 8 botões
+grandes por banco, drop de afinação a um toque e o afinador. No app standalone
+ela ocupa a tela inteira. Os botões respondem ao encostar o dedo, e para sair é
+preciso segurar o botão "Segure para sair".
+
+![Modo palco](docs/stage.png)
+
+Funciona também com teclado e pedais Bluetooth de virar página:
+← / → ou PageUp / PageDown trocam de preset, ↑ / ↓ trocam de banco,
+1 a 8 escolhem o botão do banco, **T** abre o afinador e Esc sai.
+
+### Afinador
+
+Botão **AFINADOR** (ou tecla **T**). Funciona do Si grave do baixo de 5 cordas
+para cima, e por padrão muta a saída enquanto você afina. Ele lê a entrada antes
+do drop, então afine o instrumento normal.
+
+![Afinador](docs/tuner.png)
 
 ## Testando sem interface de áudio
 
@@ -86,12 +118,12 @@ rápido que tempo real.
    sem amp nem efeito) em `.wav`, `.aif` ou `.flac`. Muitos sites de captura e
    fóruns de NAM oferecem DIs grátis para teste; qualquer faixa DI de multitrack
    também serve.
-2. Abra o standalone, clique em **Arquivo DI...** e escolha o arquivo. Ele
-   começa a tocar em loop; **Tocar DI / Parar DI** liga e desliga.
+2. Abra o standalone, clique no botão **DI** ao lado do knob Input, em **Escolher arquivo...** e
+   escolha o arquivo. Ele começa a tocar em loop; o mesmo botão **DI** toca e para.
 3. Em **Options → Audio/MIDI Settings**, deixe a saída nos fones ou alto-falantes
    do computador. A entrada pode ficar em qualquer coisa: com o DI tocando, ela
    é ignorada.
-4. Carregue uma captura em **AMP** e troque a afinação nos botões de baixo para
+4. Carregue uma captura no card do amp e ligue o **Pitch** na barra de baixo para
    ouvir o drop.
 
 ## Limitações conhecidas
@@ -99,8 +131,9 @@ rápido que tempo real.
 - O drop de afinação adiciona **cerca de 30 ms** de latência quando está ligado
   (em "Padrão" não adiciona nada). É o ponto que mais precisa de teste com
   instrumento de verdade.
-- Ainda não há conexão com o TONE3000, presets nem modo palco. Veja o roteiro
-  em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- Ainda não há conexão com o TONE3000, e os presets por enquanto ficam só na
+  memória (somem ao fechar o app) até o sistema de presets entrar. Veja o
+  roteiro em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Licenças
 

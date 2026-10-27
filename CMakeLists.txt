@@ -66,7 +66,8 @@ add_library(pedal_dsp STATIC
     Source/dsp/AmpModel.cpp
     Source/dsp/DropTuner.cpp
     Source/dsp/SignalChain.cpp
-    Source/dsp/TestInputPlayer.cpp)
+    Source/dsp/TestInputPlayer.cpp
+    Source/dsp/Tuner.cpp)
 target_include_directories(pedal_dsp PUBLIC Source)
 # NAM registers its model architectures from static initialisers, so the whole
 # archive must be linked or the linker drops them and every model fails to load.
@@ -98,7 +99,13 @@ juce_add_plugin(PedalApp
 
 target_sources(PedalApp PRIVATE
     Source/PluginProcessor.cpp
-    Source/PluginEditor.cpp)
+    Source/PluginEditor.cpp
+    Source/ui/BlockDetailView.cpp
+    Source/ui/ChainView.cpp
+    Source/ui/ControlStrip.cpp
+    Source/ui/PresetBrowser.cpp
+    Source/ui/StageView.cpp
+    Source/ui/TunerView.cpp)
 
 target_compile_definitions(PedalApp PUBLIC
     JUCE_VST3_CAN_REPLACE_VST2=0
