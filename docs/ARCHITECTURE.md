@@ -12,6 +12,7 @@ no áudio por troca atômica, como `pedal::AmpModel` já faz.
 | Pasta | O que tem |
 |---|---|
 | `Source/dsp/` | Motor de som, sem interface. `SignalChain` monta a cadeia; `AmpModel` guarda e troca a captura NAM; `DropTuner` faz o pitch shift. Compilado como a biblioteca `pedal_dsp`, usada pelo plugin e pelos testes. |
+| `Source/tone3000/` | Conexão com o TONE3000: login OAuth/PKCE, `select_tone`, download de modelos, cache offline e limite de pedidos. Compilado como `pedal_tone3000`. Nunca roda na thread de áudio. |
 | `Source/ui/` | Visual compartilhado (`PedalLookAndFeel`, paleta de cores). |
 | `Source/PluginProcessor.*` | Parâmetros (APVTS), estado salvo, ligação entre parâmetros e `SignalChain`. |
 | `Source/PluginEditor.*` | Tela principal. |
@@ -32,7 +33,24 @@ As interfaces abaixo são o contrato entre elas.
   de áudio.
 - Guardar no disco só os modelos usados em presets (cache para tocar offline).
 - Respeitar 100 req/min e mostrar "Powered by TONE3000" + nome do criador.
-- Contrato com os presets:
+- **Feito** (ver `Source/tone3000/Tone3000Service.h`). O que os outros módulos usam:
+
+```cpp
+pedal::tone3000::Service& t3k = processor.getTone3000();
+
+// Thread de fundo. Lê a cópia em disco se existir; senão baixa. Com
+// keepOfflineFor ("presets") a cópia fica no disco para esse dono.
+juce::String error = t3k.fetchModelJson (toneId, modelId, namJson, "presets");
+
+// Sempre que o banco de presets mudar: a lista de modelos que os presets usam.
+// Tudo que nenhum dono ("presets", "current") usa é apagado do disco.
+t3k.retainOffline ("presets", modelIdsDosPresets);
+```
+
+  O processador usa o dono `"current"` para a captura que está no amp (é o que o
+  estado do plugin restaura). Depois do JSON, o carregamento continua sendo
+  `AmpModel::loadFromJson` fora da thread de áudio.
+- Contrato com os presets (o `ToneRef` mora em `Source/presets/ToneRef.h`):
 
 ```cpp
 struct ToneRef

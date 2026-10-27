@@ -23,6 +23,15 @@ PedalAudioProcessorEditor::PedalAudioProcessorEditor (PedalAudioProcessor& p)
     statusLabel.setColour (juce::Label::textColourId, Colours::warn);
     addAndMakeVisible (statusLabel);
 
+    attributionLabel.setJustificationType (juce::Justification::centred);
+    attributionLabel.setFont (juce::FontOptions (13.0f));
+    attributionLabel.setColour (juce::Label::textColourId, Colours::textDim);
+    addAndMakeVisible (attributionLabel);
+
+    tone3000Button.setTooltip ("Escolher uma captura no TONE3000");
+    tone3000Button.onClick = [this] { chooseTone3000(); };
+    addAndMakeVisible (tone3000Button);
+
     ampButton.onClick = [this] { chooseAmpModel(); };
     cabButton.onClick = [this] { chooseCabinet(); };
     addAndMakeVisible (ampButton);
@@ -118,6 +127,131 @@ void PedalAudioProcessorEditor::chooseAmpModel()
     });
 }
 
+void PedalAudioProcessorEditor::chooseTone3000()
+{
+    auto& t3k = processor.getTone3000();
+
+    if (t3k.isSelecting())
+    {
+        t3k.cancelSelect();
+        return;
+    }
+
+    if (! t3k.hasClientId())
+    {
+        statusLabel.setText (juce::String::fromUTF8 ("Falta o client_id do TONE3000 nesta versão. Veja a seção TONE3000 do README."),
+                             juce::dontSendNotification);
+        return;
+    }
+
+    if (t3k.isConnected())
+    {
+        openTone3000Catalog();
+        return;
+    }
+
+    // Before the first sign-in TONE3000 asks for a short "partnership" screen.
+    juce::Component::SafePointer<PedalAudioProcessorEditor> safeThis (this);
+    juce::AlertWindow::showOkCancelBox (
+        juce::MessageBoxIconType::NoIcon,
+        "TONE3000",
+        juce::String::fromUTF8 ("O Pedal App se conecta ao TONE3000 para dar acesso a uma enorme biblioteca de capturas "
+                                "Neural Amp Modeler e IRs de equipamentos reais, feitas por uma comunidade de músicos "
+                                "do mundo todo.\n\nVocê entra com a sua conta do TONE3000 (grátis) no navegador e "
+                                "escolhe o tom lá; ele volta direto para o app."),
+        "Entrar no TONE3000",
+        juce::String::fromUTF8 ("Agora não"),
+        this,
+        juce::ModalCallbackFunction::create ([safeThis] (int result)
+        {
+            if (safeThis != nullptr && result == 1)
+                safeThis->openTone3000Catalog();
+        }));
+}
+
+void PedalAudioProcessorEditor::openTone3000Catalog()
+{
+    statusLabel.setText (juce::String::fromUTF8 ("Escolha um tom na página do TONE3000 que abriu no navegador..."),
+                         juce::dontSendNotification);
+
+    juce::Component::SafePointer<PedalAudioProcessorEditor> safeThis (this);
+    processor.getTone3000().selectTone ([safeThis] (pedal::tone3000::SelectResult result)
+    {
+        if (safeThis != nullptr)
+            safeThis->tone3000Selected (result);
+    });
+}
+
+void PedalAudioProcessorEditor::tone3000Selected (const pedal::tone3000::SelectResult& result)
+{
+    using Status = pedal::tone3000::SelectResult::Status;
+
+    if (result.status == Status::canceled)
+    {
+        statusLabel.setText ({}, juce::dontSendNotification);
+        return;
+    }
+    if (result.status == Status::failed)
+    {
+        statusLabel.setText (result.error, juce::dontSendNotification);
+        return;
+    }
+
+    const auto& tone = result.tone;
+    if (tone.models.size() == 1)
+    {
+        loadTone3000Model (tone, tone.models.getReference (0));
+        return;
+    }
+
+    // A tone usually has one capture per amp setting/channel; let the user pick.
+    statusLabel.setText (tone.title + juce::String::fromUTF8 (": escolha a captura"), juce::dontSendNotification);
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader (tone.title);
+    const int suggested = pedal::tone3000::Service::defaultModelIndex (tone);
+    for (int i = 0; i < tone.models.size(); ++i)
+    {
+        const auto& m = tone.models.getReference (i);
+        juce::StringArray details;
+        if (m.size.isNotEmpty())
+            details.add (m.size);
+        if (m.architecture.isNotEmpty())
+            details.add (m.architecture == "custom" ? juce::String ("custom") : "A" + m.architecture);
+        menu.addItem (i + 1, m.name + (details.isEmpty() ? juce::String() : "  (" + details.joinIntoString (", ") + ")"),
+                      true, i == suggested);
+    }
+
+    juce::Component::SafePointer<PedalAudioProcessorEditor> safeThis (this);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&tone3000Button),
+                        [safeThis, tone] (int chosen)
+    {
+        if (safeThis == nullptr)
+            return;
+        if (chosen <= 0)
+            safeThis->statusLabel.setText ({}, juce::dontSendNotification);
+        else
+            safeThis->loadTone3000Model (tone, tone.models.getReference (chosen - 1));
+    });
+}
+
+void PedalAudioProcessorEditor::loadTone3000Model (const pedal::tone3000::Tone& tone, const pedal::tone3000::Model& model)
+{
+    PedalAudioProcessor::Tone3000Model ref;
+    ref.toneId = tone.id;
+    ref.modelId = model.id;
+    ref.name = model.name.isEmpty() || model.name == tone.title ? tone.title : tone.title + " - " + model.name;
+    ref.creator = tone.creator;
+
+    statusLabel.setText ("Baixando " + ref.name + "...", juce::dontSendNotification);
+    juce::Component::SafePointer<PedalAudioProcessorEditor> safeThis (this);
+    processor.loadTone3000ModelAsync (ref, [safeThis] (juce::String error)
+    {
+        if (safeThis != nullptr)
+            safeThis->statusLabel.setText (error, juce::dontSendNotification);
+    });
+}
+
 void PedalAudioProcessorEditor::chooseCabinet()
 {
     fileChooser = std::make_unique<juce::FileChooser> ("Escolha um IR de caixa", juce::File(), "*.wav;*.aif;*.aiff");
@@ -160,6 +294,13 @@ void PedalAudioProcessorEditor::timerCallback()
 
     if (processor.ampHasSampleRateMismatch() && statusLabel.getText().isEmpty())
         statusLabel.setText (juce::String::fromUTF8 ("Atenção: a captura foi feita em outra taxa de amostragem"), juce::dontSendNotification);
+
+    const auto t3kModel = processor.getTone3000Model();
+    attributionLabel.setText (! t3kModel.isEmpty() && name.isNotEmpty()
+                                  ? pedal::tone3000::Service::attribution (t3kModel.creator)
+                                  : juce::String(),
+                              juce::dontSendNotification);
+    tone3000Button.setButtonText (processor.getTone3000().isSelecting() ? "CANCELAR" : "TONE3000");
 
     const auto cpu = processor.getCpuLoad();
     cpuLabel.setText ("CPU " + juce::String (juce::roundToInt (cpu * 100.0)) + "%", juce::dontSendNotification);
@@ -222,6 +363,13 @@ void PedalAudioProcessorEditor::resized()
     diPlayButton.setBounds (header.removeFromRight (110).reduced (4, 4));
     diFileButton.setBounds (header.removeFromRight (150).reduced (4, 4));
     modelLabel.setBounds (header);
+    {
+        // The amp's source row: TONE3000 button and the credit for the loaded tone.
+        auto row = area.removeFromTop (30);
+        tone3000Button.setBounds (row.removeFromRight (120).reduced (4, 2));
+        row.removeFromLeft (120); // keeps the credit centred under the model name
+        attributionLabel.setBounds (row);
+    }
 
     statusLabel.setBounds (area.removeFromTop (24));
     area.removeFromTop (8);

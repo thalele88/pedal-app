@@ -4,6 +4,7 @@
 
 #include "dsp/SignalChain.h"
 #include "dsp/TestInputPlayer.h"
+#include "tone3000/Tone3000Service.h"
 
 namespace ParamIDs
 {
@@ -55,6 +56,18 @@ public:
     void loadTestInputAsync (const juce::File& file, std::function<void (juce::String)> onDone = {});
     pedal::TestInputPlayer& getTestInput() { return testInput; }
 
+    // A capture from TONE3000. Downloaded (or read from the offline copy) and
+    // loaded on the loader thread; `onDone` works like loadAmpModelAsync's.
+    struct Tone3000Model
+    {
+        juce::String toneId, modelId, name, creator;
+        bool isEmpty() const { return modelId.isEmpty(); }
+    };
+    void loadTone3000ModelAsync (const Tone3000Model& model, std::function<void (juce::String)> onDone = {});
+    // The TONE3000 capture on the amp; empty when the amp came from a file.
+    Tone3000Model getTone3000Model() const { return tone3000Model; }
+    pedal::tone3000::Service& getTone3000() { return tone3000; }
+
     juce::String getAmpModelName() const { return chain.getAmp().getModelName(); }
     bool ampHasSampleRateMismatch() const { return chain.getAmp().hasSampleRateMismatch(); }
     juce::File getCabinetFile() const { return cabinetFile; }
@@ -72,9 +85,12 @@ private:
     pedal::SignalChain chain;
     pedal::TestInputPlayer testInput;
     juce::AudioProcessLoadMeasurer loadMeasurer;
+    // Declared before loaderPool so it outlives the loader jobs that use it.
+    pedal::tone3000::Service tone3000;
     juce::ThreadPool loaderPool { 1 };
 
     juce::File ampModelFile, cabinetFile;
+    Tone3000Model tone3000Model;
     // Lets callbacks posted by the loader know the processor is gone.
     std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>> (true);
 

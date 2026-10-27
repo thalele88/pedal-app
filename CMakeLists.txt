@@ -74,6 +74,39 @@ target_link_libraries(pedal_dsp
 target_compile_definitions(pedal_dsp PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 set_target_properties(pedal_dsp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# --- TONE3000 connection ------------------------------------------------------
+# Publishable key (t3k_pub_...) from tone3000.com > Settings > API. It is meant
+# to ship inside apps (OAuth PKCE, no secret), but it is yours, so it is passed
+# at configure time instead of living in git:
+#   cmake -S . -B build -DPEDAL_TONE3000_CLIENT_ID=t3k_pub_...
+# CMake remembers it, so this is needed once per build folder.
+set(PEDAL_TONE3000_CLIENT_ID "$ENV{TONE3000_CLIENT_ID}" CACHE STRING "TONE3000 publishable key (t3k_pub_...)")
+if (NOT PEDAL_TONE3000_CLIENT_ID)
+    message(STATUS "PEDAL_TONE3000_CLIENT_ID not set: the TONE3000 button will explain how to add it")
+endif()
+
+add_library(pedal_tone3000 STATIC
+    Source/tone3000/LoopbackServer.cpp
+    Source/tone3000/ModelCache.cpp
+    Source/tone3000/OAuth.cpp
+    Source/tone3000/RateLimiter.cpp
+    Source/tone3000/Tone3000Service.cpp
+    Source/tone3000/TokenStore.cpp)
+target_include_directories(pedal_tone3000 PUBLIC Source)
+target_link_libraries(pedal_tone3000
+    PUBLIC juce::juce_events juce::juce_cryptography
+    PRIVATE juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+target_compile_definitions(pedal_tone3000
+    PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+    PRIVATE PEDAL_TONE3000_CLIENT_ID="${PEDAL_TONE3000_CLIENT_ID}")
+if (APPLE)
+    target_link_libraries(pedal_tone3000 PUBLIC "-framework Security")  # Keychain
+elseif (WIN32)
+    target_link_libraries(pedal_tone3000 PUBLIC crypt32)                # DPAPI
+    target_compile_definitions(pedal_tone3000 PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+set_target_properties(pedal_tone3000 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # --- Plugin + standalone app --------------------------------------------------
 set(PEDAL_FORMATS Standalone VST3)
 if (APPLE)
@@ -103,6 +136,7 @@ target_compile_definitions(PedalApp PUBLIC
 
 target_link_libraries(PedalApp
     PRIVATE pedal_dsp
+            pedal_tone3000
             juce::juce_audio_utils
     PUBLIC juce::juce_recommended_config_flags
            juce::juce_recommended_lto_flags
@@ -120,4 +154,11 @@ if (PEDAL_BUILD_TESTS)
         juce::juce_recommended_config_flags)
     enable_testing()
     add_test(NAME EngineSmokeTest COMMAND EngineSmokeTest)
+
+    # TONE3000 pieces that work without network or an account.
+    juce_add_console_app(Tone3000Test PRODUCT_NAME "Tone3000Test")
+    target_sources(Tone3000Test PRIVATE Tests/Tone3000Test.cpp)
+    target_link_libraries(Tone3000Test PRIVATE pedal_tone3000
+        juce::juce_recommended_config_flags)
+    add_test(NAME Tone3000Test COMMAND Tone3000Test)
 endif()

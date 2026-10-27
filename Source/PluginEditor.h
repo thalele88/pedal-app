@@ -32,13 +32,19 @@ private:
     void chooseAmpModel();
     void chooseCabinet();
     void chooseTestInput();
+    void chooseTone3000();
+    void openTone3000Catalog();
+    void tone3000Selected (const pedal::tone3000::SelectResult&);
+    void loadTone3000Model (const pedal::tone3000::Tone&, const pedal::tone3000::Model&);
     void setDrop (int semitones);
 
     PedalAudioProcessor& processor;
     pedal::ui::PedalLookAndFeel lookAndFeel;
 
-    juce::Label title, modelLabel, cpuLabel, statusLabel;
+    juce::Label title, modelLabel, cpuLabel, statusLabel, attributionLabel;
     juce::TextButton ampButton { "AMP" }, cabButton { "CAIXA" };
+    // Always on screen: TONE3000 asks integrations to keep a path to the catalog.
+    juce::TextButton tone3000Button { "TONE3000" };
     juce::ToggleButton cabToggle { "Caixa ligada" };
     juce::TextButton diFileButton { "Arquivo DI..." }, diPlayButton;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> cabAttachment;
