@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "dsp/SignalChain.h"
+#include "dsp/TestInputPlayer.h"
 
 namespace ParamIDs
 {
@@ -50,6 +51,10 @@ public:
     // thread with an empty string on success or an error message.
     void loadAmpModelAsync (const juce::File& file, std::function<void (juce::String)> onDone = {});
     void loadCabinet (const juce::File& file);
+    // Test input: a recorded DI track played through the chain instead of the
+    // live input, for playing around without an audio interface.
+    void loadTestInputAsync (const juce::File& file, std::function<void (juce::String)> onDone = {});
+    pedal::TestInputPlayer& getTestInput() { return testInput; }
 
     juce::String getAmpModelName() const { return chain.getAmp().getModelName(); }
     bool ampHasSampleRateMismatch() const { return chain.getAmp().hasSampleRateMismatch(); }
@@ -71,6 +76,7 @@ private:
 
     pedal::SignalChain chain;
     double currentSampleRate = 48000.0;
+    pedal::TestInputPlayer testInput;
     juce::AudioProcessLoadMeasurer loadMeasurer;
     juce::ThreadPool loaderPool { 1 };
 

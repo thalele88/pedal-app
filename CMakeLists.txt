@@ -17,10 +17,19 @@ FetchContent_Declare(juce
 
 # NeuralAmpModelerCore has no library target, so we only download it
 # (SOURCE_SUBDIR points nowhere) and compile its sources below.
+# Its Eigen submodule lives on gitlab.com, which often refuses clones under
+# load, so we skip submodules and fetch the same Eigen commit from a GitHub
+# mirror instead. The full commit hash pins the exact content.
 FetchContent_Declare(nam
     GIT_REPOSITORY https://github.com/sdatkinson/NeuralAmpModelerCore.git
     GIT_TAG v0.6.0
-    GIT_SUBMODULES Dependencies/eigen
+    GIT_SHALLOW ON
+    GIT_SUBMODULES ""
+    SOURCE_SUBDIR do-not-add)
+
+FetchContent_Declare(eigen
+    GIT_REPOSITORY https://github.com/eigen-mirror/eigen.git
+    GIT_TAG bc3b39870ecb690a623a3f49149a358b95c5781d # NAM v0.6.0's submodule pin
     SOURCE_SUBDIR do-not-add)
 
 FetchContent_Declare(signalsmith_stretch
@@ -28,7 +37,7 @@ FetchContent_Declare(signalsmith_stretch
     GIT_TAG 1.4.0
     GIT_SHALLOW ON)
 
-FetchContent_MakeAvailable(juce nam signalsmith_stretch)
+FetchContent_MakeAvailable(juce nam eigen signalsmith_stretch)
 
 # --- Signalsmith Stretch with asymmetric windows ------------------------------
 # Its STFT already supports asymmetric windows (same frequency resolution for
@@ -60,7 +69,7 @@ add_library(nam_core STATIC ${NAM_SOURCES})
 target_include_directories(nam_core SYSTEM PUBLIC
     "${nam_SOURCE_DIR}"
     "${nam_SOURCE_DIR}/NAM"
-    "${nam_SOURCE_DIR}/Dependencies/eigen"
+    "${eigen_SOURCE_DIR}"
     "${nam_SOURCE_DIR}/Dependencies/nlohmann")
 # float samples so NAM reads JUCE buffers directly, A2 fast path for TONE3000 captures
 target_compile_definitions(nam_core PUBLIC NAM_SAMPLE_FLOAT NAM_ENABLE_A2_FAST)
@@ -77,7 +86,8 @@ add_library(pedal_dsp STATIC
     Source/dsp/AmpModel.cpp
     Source/dsp/DropTuner.cpp
     Source/dsp/SignalChain.cpp
-    Source/dsp/SpliceShifter.cpp)
+    Source/dsp/SpliceShifter.cpp
+    Source/dsp/TestInputPlayer.cpp)
 target_include_directories(pedal_dsp PUBLIC Source)
 target_include_directories(pedal_dsp SYSTEM PRIVATE "${PEDAL_GENERATED_DIR}")
 # NAM registers its model architectures from static initialisers, so the whole
@@ -129,7 +139,8 @@ if (PEDAL_BUILD_TESTS)
     juce_add_console_app(EngineSmokeTest PRODUCT_NAME "EngineSmokeTest")
     target_sources(EngineSmokeTest PRIVATE Tests/EngineSmokeTest.cpp)
     target_compile_definitions(EngineSmokeTest PRIVATE
-        PEDAL_EXAMPLE_MODELS_DIR="${nam_SOURCE_DIR}/example_models")
+        PEDAL_EXAMPLE_MODELS_DIR="${nam_SOURCE_DIR}/example_models"
+        PEDAL_EXAMPLE_AUDIO_DIR="${nam_SOURCE_DIR}/example_audio")
     target_link_libraries(EngineSmokeTest PRIVATE pedal_dsp
         juce::juce_recommended_config_flags)
     enable_testing()

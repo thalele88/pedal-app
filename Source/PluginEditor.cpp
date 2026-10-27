@@ -29,6 +29,19 @@ PedalAudioProcessorEditor::PedalAudioProcessorEditor (PedalAudioProcessor& p)
     addAndMakeVisible (cabButton);
 
     addAndMakeVisible (cabToggle);
+
+    diFileButton.setTooltip (juce::String::fromUTF8 ("Escolha uma gravação limpa de guitarra ou baixo para tocar sem interface"));
+    diFileButton.onClick = [this] { chooseTestInput(); };
+    diPlayButton.onClick = [this]
+    {
+        auto& di = processor.getTestInput();
+        if (! di.hasClip())
+            chooseTestInput();
+        else
+            di.setPlaying (! di.isPlaying());
+    };
+    addAndMakeVisible (diFileButton);
+    addAndMakeVisible (diPlayButton);
     cabAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         processor.parameters, ParamIDs::cabEnabled, cabToggle);
 
@@ -138,6 +151,29 @@ void PedalAudioProcessorEditor::chooseCabinet()
     });
 }
 
+void PedalAudioProcessorEditor::chooseTestInput()
+{
+    fileChooser = std::make_unique<juce::FileChooser> ("Escolha uma gravação DI (guitarra ou baixo limpo)",
+                                                       juce::File(), "*.wav;*.aif;*.aiff;*.flac");
+    fileChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                              [this] (const juce::FileChooser& fc)
+    {
+        const auto file = fc.getResult();
+        if (file == juce::File())
+            return;
+
+        juce::Component::SafePointer<PedalAudioProcessorEditor> safeThis (this);
+        processor.loadTestInputAsync (file, [safeThis] (juce::String error)
+        {
+            if (safeThis == nullptr)
+                return;
+            safeThis->statusLabel.setText (error, juce::dontSendNotification);
+            if (error.isEmpty())
+                safeThis->processor.getTestInput().setPlaying (true);
+        });
+    });
+}
+
 void PedalAudioProcessorEditor::timerCallback()
 {
     const auto name = processor.getAmpModelName();
@@ -152,6 +188,12 @@ void PedalAudioProcessorEditor::timerCallback()
 
     const auto cab = processor.getCabinetFile();
     cabButton.setButtonText (cab == juce::File() ? "CAIXA" : "CAIXA\n" + cab.getFileNameWithoutExtension());
+
+    const auto& di = processor.getTestInput();
+    diPlayButton.setButtonText (di.isPlaying() ? juce::String ("Parar DI") : juce::String ("Tocar DI"));
+    diPlayButton.setToggleState (di.isPlaying(), juce::dontSendNotification);
+    if (di.hasClip())
+        diFileButton.setButtonText (di.getFile().getFileNameWithoutExtension());
 
     const int drop = (int) processor.parameters.getRawParameterValue (ParamIDs::drop)->load();
     for (int i = 0; i < dropButtons.size(); ++i)
@@ -209,8 +251,10 @@ void PedalAudioProcessorEditor::resized()
     auto area = getLocalBounds().reduced (16);
 
     auto header = area.removeFromTop (40);
-    title.setBounds (header.removeFromLeft (200));
-    cpuLabel.setBounds (header.removeFromRight (120));
+    title.setBounds (header.removeFromLeft (160));
+    cpuLabel.setBounds (header.removeFromRight (90));
+    diPlayButton.setBounds (header.removeFromRight (110).reduced (4, 4));
+    diFileButton.setBounds (header.removeFromRight (150).reduced (4, 4));
     modelLabel.setBounds (header);
 
     statusLabel.setBounds (area.removeFromTop (24));

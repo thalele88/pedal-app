@@ -31,6 +31,7 @@ private:
     void setupKnob (Knob&, const juce::String& paramId, const juce::String& name);
     void chooseAmpModel();
     void chooseCabinet();
+    void chooseTestInput();
     void setDrop (int semitones);
     void setDropMode (pedal::DropTuner::Mode mode);
 
@@ -40,6 +41,7 @@ private:
     juce::Label title, modelLabel, cpuLabel, statusLabel;
     juce::TextButton ampButton { "AMP" }, cabButton { "CAIXA" };
     juce::ToggleButton cabToggle { "Caixa ligada" };
+    juce::TextButton diFileButton { "Arquivo DI..." }, diPlayButton;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> cabAttachment;
 
     Knob inputKnob, gateKnob, blendKnob, outputKnob;

@@ -21,6 +21,9 @@ tocar ao vivo.
     notas graves um pouco borradas.
 - Troca de captura sem estalo: a nova entra com crossfade e nada é carregado na
   thread de áudio.
+- **Modo de teste sem interface:** toca uma gravação limpa (DI) de guitarra ou
+  baixo em loop pela cadeia, para ouvir capturas e o drop pelo fone ou pela
+  caixa do computador.
 - Medidor de CPU e aviso quando a captura foi treinada em outra taxa de amostragem.
 - Formatos: Standalone e VST3 (Windows/Mac/Linux) e AU (Mac).
 
@@ -76,6 +79,20 @@ ao lado, já alinhados com o original, para ouvir e comparar.
 2. O JUCE silencia a entrada na primeira vez para evitar microfonia: desmarque
    "Mute audio input" na mesma tela.
 3. Clique em **AMP** para escolher um `.nam` e em **CAIXA** para escolher um IR.
+
+## Testando sem interface de áudio
+
+1. Arrume uma gravação **DI** (guitarra ou baixo gravado limpo, direto na linha,
+   sem amp nem efeito) em `.wav`, `.aif` ou `.flac`. Muitos sites de captura e
+   fóruns de NAM oferecem DIs grátis para teste; qualquer faixa DI de multitrack
+   também serve.
+2. Abra o standalone, clique em **Arquivo DI...** e escolha o arquivo. Ele
+   começa a tocar em loop; **Tocar DI / Parar DI** liga e desliga.
+3. Em **Options → Audio/MIDI Settings**, deixe a saída nos fones ou alto-falantes
+   do computador. A entrada pode ficar em qualquer coisa: com o DI tocando, ela
+   é ignorada.
+4. Carregue uma captura em **AMP** e troque a afinação nos botões de baixo para
+   ouvir o drop.
 
 ## Limitações conhecidas
 

@@ -82,6 +82,7 @@ void PedalAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     currentSampleRate = sampleRate;
     chain.prepare (sampleRate, samplesPerBlock);
+    testInput.prepare (sampleRate);
     loadMeasurer.reset (sampleRate, samplesPerBlock);
     updateLatency();
 }
@@ -105,6 +106,7 @@ void PedalAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     settings.outputGainDb = outputGain->load();
     settings.cabEnabled = cabEnabled->load() > 0.5f;
 
+    testInput.process (buffer);
     chain.process (buffer, settings);
 }
 
@@ -125,6 +127,19 @@ void PedalAudioProcessor::loadAmpModelAsync (const juce::File& file, std::functi
     });
 }
 
+void PedalAudioProcessor::loadTestInputAsync (const juce::File& file, std::function<void (juce::String)> onDone)
+{
+    loaderPool.addJob ([this, file, onDone, aliveFlag = alive]
+    {
+        auto error = testInput.load (file);
+        juce::MessageManager::callAsync ([error, onDone, aliveFlag]
+        {
+            if (aliveFlag->load() && onDone)
+                onDone (error);
+        });
+    });
+}
+
 void PedalAudioProcessor::loadCabinet (const juce::File& file)
 {
     cabinetFile = file;
@@ -134,6 +149,7 @@ void PedalAudioProcessor::loadCabinet (const juce::File& file)
 void PedalAudioProcessor::timerCallback()
 {
     chain.getAmp().collectGarbage();
+    testInput.collectGarbage();
     updateLatency();
 }
 
@@ -160,6 +176,7 @@ void PedalAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     auto state = parameters.copyState();
     state.setProperty ("ampModel", ampModelFile.getFullPathName(), nullptr);
     state.setProperty ("cabinet", cabinetFile.getFullPathName(), nullptr);
+    state.setProperty ("testInput", testInput.getFile().getFullPathName(), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -180,6 +197,11 @@ void PedalAudioProcessor::setStateInformation (const void* data, int sizeInBytes
     const juce::File cab (state.getProperty ("cabinet").toString());
     if (cab.existsAsFile())
         loadCabinet (cab);
+
+    // Remembers the DI file but never starts playing it on its own.
+    const juce::File di (state.getProperty ("testInput").toString());
+    if (di.existsAsFile())
+        loadTestInputAsync (di);
 }
 
 juce::AudioProcessorEditor* PedalAudioProcessor::createEditor()
