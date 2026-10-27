@@ -175,6 +175,26 @@ int main()
     std::printf ("processed %.0f s of audio in %.2f s (%.1fx real time)\n", seconds, elapsed, realtimeFactor);
     check (realtimeFactor > 2.0, "runs at least 2x faster than real time");
 
+    {
+        // With every gain at maximum the safety limiter still keeps the output
+        // under its ceiling.
+        pedal::ChainSettings loud;
+        loud.inputGainDb = 24.0f;
+        loud.outputGainDb = 12.0f;
+        double loudPeak = 0.0;
+        for (int b = 0; b < (int) (2.0 * sampleRate / blockSize); ++b)
+        {
+            fillTestSignal (buffer, sampleRate, position);
+            buffer.applyGain (8.0f);
+            chain.process (buffer, loud);
+            loudPeak = std::max (loudPeak, (double) buffer.getMagnitude (0, 0, blockSize));
+        }
+        const double ceiling = juce::Decibels::decibelsToGain (pedal::SignalChain::outputCeilingDb);
+        const auto what = juce::String::formatted ("output limiter: peak %.1f dBFS with all gains maxed",
+                                                   juce::Decibels::gainToDecibels (loudPeak));
+        check (loudPeak <= ceiling * 1.01, what.toRawUTF8());
+    }
+
     using Buffer = pedal::DropTuner::Buffer;
     const struct { Buffer buffer; const char* name; double expectedMs; } buffers[] = {
         { Buffer::fast, "fast", 0.0 }, { Buffer::ms20, "20 ms", 20.0 }, { Buffer::ms30, "30 ms", 30.0 },

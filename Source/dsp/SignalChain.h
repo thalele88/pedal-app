@@ -24,10 +24,15 @@ struct ChainSettings
 };
 
 // Signal flow (mono inside, copied to every output channel):
-//   input gain -> gate -> drop tuner -> NAM amp -> cab IR -> clean blend -> output gain
+//   input gain -> gate -> drop tuner -> NAM amp -> cab IR -> clean blend -> output gain -> limiter
+//
+// The limiter is a safety net for ears and speakers: whatever a capture or a
+// gain setting does, the output never goes above outputCeilingDb.
 class SignalChain
 {
 public:
+    static constexpr float outputCeilingDb = -1.0f;
+
     void prepare (double sampleRate, int maxBlockSize);
     void reset();
     void process (juce::AudioBuffer<float>& buffer, const ChainSettings& settings) noexcept;
@@ -47,6 +52,7 @@ private:
     AmpModel amp;
     DropTuner dropTuner;
     juce::dsp::NoiseGate<float> gate;
+    juce::dsp::Limiter<float> limiter;
     juce::dsp::Convolution cabinet { juce::dsp::Convolution::NonUniform { 256 } };
     juce::AudioBuffer<float> monoBuffer, cleanBuffer;
     juce::SmoothedValue<float> inputGain, outputGain, blend;

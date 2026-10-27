@@ -11,7 +11,7 @@ tocar ao vivo.
 ## O que já funciona
 
 - Carregar uma captura `.nam` do computador (A1 e A2) e um IR de caixa `.wav`.
-- Cadeia: entrada → gate → afinação → amp NAM → caixa → mix limpo → saída.
+- Cadeia: entrada → gate → afinação → amp NAM → caixa → mix limpo → saída → limitador de segurança (nunca passa de −1 dBFS).
 - Drop de afinação (Pitch, no estilo do plugin do TONE3000): liga/desliga,
   de −24 a +24 semitons, **STEP** (semitons inteiros ou contínuo, tipo whammy),
   **Tonality** (deixa os agudos sem mudar) e **Buffer**:
