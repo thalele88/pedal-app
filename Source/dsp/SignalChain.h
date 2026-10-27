@@ -14,8 +14,10 @@ struct ChainSettings
 {
     float inputGainDb = 0.0f;
     float gateThresholdDb = -100.0f; // -100 = gate off
-    int dropSemitones = 0;
-    DropTuner::Mode dropMode = DropTuner::Mode::fast;
+    bool pitchOn = false;
+    float pitchSemitones = 0.0f;     // already rounded when STEP is on
+    DropTuner::Buffer pitchBuffer = DropTuner::Buffer::fast;
+    float pitchTonalityHz = 0.0f;    // 0 = shift everything
     float cleanBlend = 0.0f;         // 0..1, mostly for bass: keeps the low end clean
     float outputGainDb = 0.0f;
     bool cabEnabled = true;

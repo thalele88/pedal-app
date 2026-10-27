@@ -12,13 +12,14 @@ tocar ao vivo.
 
 - Carregar uma captura `.nam` do computador (A1 e A2) e um IR de caixa `.wav`.
 - Cadeia: entrada → gate → afinação → amp NAM → caixa → mix limpo → saída.
-- Drop de afinação polifônico de +12 a −12 semitons (botões de atalho de 0 a −12),
-  com dois modos:
-  - **Rápido** (padrão): atraso de uns 7 a 10 ms em notas soltas, 15 ms em
-    acordes e 19 ms no baixo. Ataque firme e graves limpos; em acordes cheios
-    pode dar uma leve tremulada.
-  - **Suave**: 18 ms fixos, sem tremulada, mas o ataque fica mais macio e as
-    notas graves um pouco borradas.
+- Drop de afinação (Pitch, no estilo do plugin do TONE3000): liga/desliga,
+  de −24 a +24 semitons, **STEP** (semitons inteiros ou contínuo, tipo whammy),
+  **Tonality** (deixa os agudos sem mudar) e **Buffer**:
+  - **Rápido** (padrão): uns 7 a 10 ms em notas soltas, 15 ms em acordes e
+    19 ms no baixo. Ataque firme; em acordes cheios pode tremular de leve.
+  - **20 / 30 / 40 / 60 ms**: atraso fixo igual ao número; quanto maior, mais
+    limpo (principalmente no grave).
+- ASIO no Windows (escolha o driver em Options → Audio/MIDI Settings).
 - Troca de captura sem estalo: a nova entra com crossfade e nada é carregado na
   thread de áudio.
 - **Modo de teste sem interface:** toca uma gravação limpa (DI) de guitarra ou
@@ -69,8 +70,8 @@ Grave a guitarra ou o baixo **sem amp** (DI, `.wav`) e rode:
 build/DropCompare_artefacts/Release/DropCompare minha_gravacao.wav -2
 ```
 
-Ele cria `minha_gravacao_drop-2_rapido.wav` e `minha_gravacao_drop-2_suave.wav`
-ao lado, já alinhados com o original, para ouvir e comparar.
+Ele cria um arquivo para cada buffer (`_rapido`, `_20ms`, `_30ms`, `_40ms`,
+`_60ms`) ao lado, já alinhados com o original, para ouvir e comparar.
 
 ## Usando no standalone
 

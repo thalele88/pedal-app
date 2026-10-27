@@ -64,8 +64,10 @@ void SignalChain::process (juce::AudioBuffer<float>& buffer, const ChainSettings
         gate.process (context);
     }
 
-    dropTuner.setSemitones (s.dropSemitones);
-    dropTuner.setMode (s.dropMode);
+    dropTuner.setEnabled (s.pitchOn);
+    dropTuner.setSemitones (s.pitchSemitones);
+    dropTuner.setBuffer (s.pitchBuffer);
+    dropTuner.setTonality (s.pitchTonalityHz);
     dropTuner.process (mono, numSamples);
 
     auto* clean = cleanBuffer.getWritePointer (0);

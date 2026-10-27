@@ -33,7 +33,7 @@ private:
     void chooseCabinet();
     void chooseTestInput();
     void setDrop (int semitones);
-    void setDropMode (pedal::DropTuner::Mode mode);
+    void setParam (const juce::String& paramId, float value);
 
     PedalAudioProcessor& processor;
     pedal::ui::PedalLookAndFeel lookAndFeel;
@@ -49,8 +49,12 @@ private:
     static constexpr int dropSteps[] = { 0, -1, -2, -3, -5, -7, -12 };
     juce::OwnedArray<juce::TextButton> dropButtons;
     juce::Label dropLabel, dropLatencyLabel;
-    // Drop engine: "Rápido" (lowest delay) or "Suave" (no flutter on big chords).
-    juce::TextButton fastButton, smoothButton;
+    // Stand-ins for the Pitch popup (STEP, Tonality, Buffer) until the
+    // TONE3000-style bottom bar from the interface work replaces this row.
+    juce::ToggleButton stepToggle { "STEP" }, tonalityToggle { "Tonality" };
+    juce::ComboBox bufferBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> stepAttachment, tonalityAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> bufferAttachment;
 
     juce::Rectangle<int> chainArea;
     std::unique_ptr<juce::FileChooser> fileChooser;

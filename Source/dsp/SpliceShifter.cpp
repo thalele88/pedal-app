@@ -178,10 +178,13 @@ float SpliceShifter::processSample (float x) noexcept
             // Going up: the delay shrinks, so jump back before it reaches zero.
             if (delay <= margin + (ratio - 1.0) * fadeLength + 1.0)
             {
+                // The jump must buy more time than the crossfade takes, or big
+                // shifts up (an octave or two) run out of delay mid-fade.
+                const int lo = std::min (longJump, std::max (minJump, (int) std::ceil ((ratio - 1.0) * fadeLength * 2.0)));
                 double score = 0.0;
-                int jump = bestJump (readIndex, minJump, shortJump, -1, score);
+                int jump = bestJump (readIndex, lo, std::max (lo, shortJump), -1, score);
                 if (score < matchThresholdShort)
-                    jump = bestJump (readIndex, minJump, longJump, -1, score);
+                    jump = bestJump (readIndex, lo, longJump, -1, score);
                 startJump (jump);
             }
         }

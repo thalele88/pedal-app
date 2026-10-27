@@ -122,7 +122,10 @@ target_sources(PedalApp PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp)
 
+# JUCE_ASIO: lets the standalone app use ASIO drivers on Windows (the lowest
+# latency there). JUCE ships the ASIO SDK headers, so nothing else is needed.
 target_compile_definitions(PedalApp PUBLIC
+    JUCE_ASIO=1
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0)
 

@@ -63,15 +63,19 @@ struct ToneRef
 
 ### 4. Qualidade e latência do drop (`Source/dsp/DropTuner.*`, branch `feat/drop-tuner`)
 
-- Dois motores, escolhidos pelo parâmetro `dropMode`:
+- Parâmetros no estilo do Pitch do TONE3000: `pitchOn`, `pitch` (−24 a +24),
+  `pitchStep`, `pitchTonalityOn`, `pitchTonality` (Hz) e `pitchBuffer`.
+- `pitchBuffer` escolhe o motor:
   - **Rápido** (`SpliceShifter`, domínio do tempo): linha de atraso lida em outra
     velocidade; os saltos são escolhidos por correlação para cair num período
     da nota. Atraso médio de 7 a 10 ms em notas, 15 ms em acordes, 19 ms em
-    baixo (varia o tempo todo; o host recebe 13 ms).
-  - **Suave** (Signalsmith Stretch): janela de 60 ms com formato assimétrico
-    (0.7), 18 ms fixos. O `CMakeLists.txt` gera uma cópia do header com o
-    parâmetro de assimetria, que a API original não expõe.
-- Trocar de modo com o drop ligado faz crossfade depois que o motor novo encheu.
+    baixo (varia o tempo todo; o host recebe 13 ms). Sem Tonality.
+  - **20/30/40/60 ms** (Signalsmith Stretch): janela assimétrica (0.7), cerca de
+    3,3 vezes o atraso, então soa mais limpo que uma janela comum com o mesmo
+    atraso. O `CMakeLists.txt` gera uma cópia do header com o parâmetro de
+    assimetria, que a API original não expõe. Cada buffer tem sua instância
+    pronta, para trocar sem alocar na thread de áudio.
+- Trocar de buffer com o pitch ligado faz crossfade depois que o motor novo encheu.
 - Próximo passo: ouvir com guitarra e baixo reais (`DropCompare`) e ajustar as
   constantes de `SpliceShifter.h` (limiares de correlação e tamanhos de salto).
 

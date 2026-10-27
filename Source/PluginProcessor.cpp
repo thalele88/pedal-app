@@ -9,8 +9,12 @@ PedalAudioProcessor::PedalAudioProcessor()
 {
     inputGain = parameters.getRawParameterValue (ParamIDs::inputGain);
     gateThreshold = parameters.getRawParameterValue (ParamIDs::gateThreshold);
-    drop = parameters.getRawParameterValue (ParamIDs::drop);
-    dropMode = parameters.getRawParameterValue (ParamIDs::dropMode);
+    pitchOn = parameters.getRawParameterValue (ParamIDs::pitchOn);
+    pitch = parameters.getRawParameterValue (ParamIDs::pitch);
+    pitchStep = parameters.getRawParameterValue (ParamIDs::pitchStep);
+    pitchTonalityOn = parameters.getRawParameterValue (ParamIDs::pitchTonalityOn);
+    pitchTonality = parameters.getRawParameterValue (ParamIDs::pitchTonality);
+    pitchBuffer = parameters.getRawParameterValue (ParamIDs::pitchBuffer);
     cleanBlend = parameters.getRawParameterValue (ParamIDs::cleanBlend);
     outputGain = parameters.getRawParameterValue (ParamIDs::outputGain);
     cabEnabled = parameters.getRawParameterValue (ParamIDs::cabEnabled);
@@ -43,16 +47,31 @@ juce::AudioProcessorValueTreeState::ParameterLayout PedalAudioProcessor::createP
             return v <= -99.0f ? String ("Desligado") : String (v, 1) + " dB";
         })));
 
-    layout.add (std::make_unique<AudioParameterInt> (
-        ParameterID { ParamIDs::drop, 1 }, juce::String::fromUTF8 ("Afinação"), -12, 12, 0,
-        AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) {
-            return v == 0 ? juce::String::fromUTF8 ("Padrão") : (v > 0 ? "+" : "") + String (v) + " st";
+    // Pitch (drop tuning), modelled on the TONE3000 plugin's Pitch block.
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { ParamIDs::pitchOn, 1 }, "Pitch ligado", false));
+
+    layout.add (std::make_unique<AudioParameterFloat> (
+        ParameterID { ParamIDs::pitch, 1 }, "Pitch", NormalisableRange<float> (-24.0f, 24.0f, 0.01f), -2.0f,
+        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) {
+            return (v > 0.0f ? "+" : "") + String (v, 1) + " st";
         })));
 
-    // Index order must match pedal::DropTuner::Mode.
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { ParamIDs::pitchStep, 1 }, "Step", true));
+
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { ParamIDs::pitchTonalityOn, 1 }, "Tonality ligada", false));
+
+    NormalisableRange<float> tonalityRange (1000.0f, 20000.0f, 1.0f);
+    tonalityRange.setSkewForCentre (5000.0f);
+    layout.add (std::make_unique<AudioParameterFloat> (
+        ParameterID { ParamIDs::pitchTonality, 1 }, "Tonality", tonalityRange, 8000.0f,
+        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) {
+            return String (v / 1000.0f, 1) + " kHz";
+        })));
+
+    // Index order must match pedal::DropTuner::Buffer.
     layout.add (std::make_unique<AudioParameterChoice> (
-        ParameterID { ParamIDs::dropMode, 1 }, "Modo do drop",
-        StringArray { juce::String::fromUTF8 ("Rápido"), "Suave" }, 0));
+        ParameterID { ParamIDs::pitchBuffer, 1 }, "Buffer",
+        StringArray { juce::String::fromUTF8 ("Rápido"), "20 ms", "30 ms", "40 ms", "60 ms" }, 0));
 
     layout.add (std::make_unique<AudioParameterFloat> (
         ParameterID { ParamIDs::cleanBlend, 1 }, "Limpo", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.0f,
@@ -100,8 +119,10 @@ void PedalAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     pedal::ChainSettings settings;
     settings.inputGainDb = inputGain->load();
     settings.gateThresholdDb = gateThreshold->load();
-    settings.dropSemitones = juce::roundToInt (drop->load());
-    settings.dropMode = static_cast<pedal::DropTuner::Mode> (juce::roundToInt (dropMode->load()));
+    settings.pitchOn = pitchOn->load() > 0.5f;
+    settings.pitchSemitones = pitchStep->load() > 0.5f ? std::round (pitch->load()) : pitch->load();
+    settings.pitchBuffer = static_cast<pedal::DropTuner::Buffer> (juce::roundToInt (pitchBuffer->load()));
+    settings.pitchTonalityHz = pitchTonalityOn->load() > 0.5f ? pitchTonality->load() : 0.0f;
     settings.cleanBlend = cleanBlend->load();
     settings.outputGainDb = outputGain->load();
     settings.cabEnabled = cabEnabled->load() > 0.5f;
@@ -153,20 +174,22 @@ void PedalAudioProcessor::timerCallback()
     updateLatency();
 }
 
-int PedalAudioProcessor::currentDropLatencySamples() const
+int PedalAudioProcessor::currentPitchLatencySamples() const
 {
-    const auto mode = static_cast<pedal::DropTuner::Mode> (juce::roundToInt (dropMode->load()));
-    return chain.getDropTuner().getLatencySamples (mode, juce::roundToInt (drop->load()));
+    if (pitchOn->load() < 0.5f)
+        return 0;
+    const auto buffer = static_cast<pedal::DropTuner::Buffer> (juce::roundToInt (pitchBuffer->load()));
+    return chain.getDropTuner().getLatencySamples (buffer);
 }
 
-double PedalAudioProcessor::getDropLatencyMs() const
+double PedalAudioProcessor::getPitchLatencyMs() const
 {
-    return 1000.0 * currentDropLatencySamples() / currentSampleRate;
+    return 1000.0 * currentPitchLatencySamples() / currentSampleRate;
 }
 
 void PedalAudioProcessor::updateLatency()
 {
-    const int latency = currentDropLatencySamples();
+    const int latency = currentPitchLatencySamples();
     if (latency != getLatencySamples())
         setLatencySamples (latency);
 }

@@ -1,11 +1,12 @@
-// Renders a recording through both drop tuner modes so they can be compared by
-// ear. Use a dry DI recording of the guitar or bass (no amp).
+// Renders a recording through every drop tuner buffer so they can be compared
+// by ear. Use a dry DI recording of the guitar or bass (no amp).
 //
 //   DropCompare <input.wav> [semitones, default -2]
 //
-// Writes <input>_drop<st>_rapido.wav and <input>_drop<st>_suave.wav next to
-// the input. Each output is lined up with the input (the typical delay of
-// that mode is removed) so you can also A/B them against the original.
+// Writes <input>_drop<st>_rapido.wav, _20ms.wav, _30ms.wav, _40ms.wav and
+// _60ms.wav next to the input. Each output is lined up with the input (the
+// typical delay of that buffer is removed) so you can also A/B them against
+// the original.
 
 #include "dsp/DropTuner.h"
 
@@ -16,12 +17,13 @@
 namespace
 {
 bool render (const juce::AudioBuffer<float>& input, double sampleRate, int semitones,
-             pedal::DropTuner::Mode mode, const juce::File& outFile)
+             pedal::DropTuner::Buffer bufferChoice, const juce::File& outFile)
 {
     const int blockSize = 128;
     pedal::DropTuner tuner;
-    tuner.setMode (mode);
-    tuner.setSemitones (semitones);
+    tuner.setEnabled (true);
+    tuner.setBuffer (bufferChoice);
+    tuner.setSemitones ((float) semitones);
     tuner.prepare (sampleRate, blockSize);
     const int latency = tuner.getLatencySamples();
 
@@ -81,9 +83,12 @@ int main (int argc, char* argv[])
     const auto base = inFile.getParentDirectory().getChildFile (inFile.getFileNameWithoutExtension()
                                                                 + "_drop" + juce::String (semitones));
     bool ok = true;
-    ok = render (input, reader->sampleRate, semitones, pedal::DropTuner::Mode::fast,
-                 base.getSiblingFile (base.getFileName() + "_rapido.wav")) && ok;
-    ok = render (input, reader->sampleRate, semitones, pedal::DropTuner::Mode::smooth,
-                 base.getSiblingFile (base.getFileName() + "_suave.wav")) && ok;
+    const struct { pedal::DropTuner::Buffer buffer; const char* suffix; } buffers[] = {
+        { pedal::DropTuner::Buffer::fast, "_rapido" }, { pedal::DropTuner::Buffer::ms20, "_20ms" },
+        { pedal::DropTuner::Buffer::ms30, "_30ms" }, { pedal::DropTuner::Buffer::ms40, "_40ms" },
+        { pedal::DropTuner::Buffer::ms60, "_60ms" } };
+    for (const auto& b : buffers)
+        ok = render (input, reader->sampleRate, semitones, b.buffer,
+                     base.getSiblingFile (base.getFileName() + b.suffix + ".wav")) && ok;
     return ok ? 0 : 1;
 }

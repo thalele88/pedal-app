@@ -37,11 +37,14 @@ void fillTestSignal (juce::AudioBuffer<float>& buffer, double sampleRate, int64_
 
 // Runs a sine through the drop tuner alone and returns the output frequency,
 // counted from zero crossings over the last second.
-double shiftedFrequency (pedal::DropTuner::Mode mode, int semitones, double inputHz, double sampleRate, int blockSize)
+double shiftedFrequency (pedal::DropTuner::Buffer buffer, float semitones, double inputHz, double sampleRate, int blockSize,
+                         float tonalityHz = 0.0f)
 {
     pedal::DropTuner tuner;
-    tuner.setMode (mode);
+    tuner.setEnabled (true);
+    tuner.setBuffer (buffer);
     tuner.setSemitones (semitones);
+    tuner.setTonality (tonalityHz);
     tuner.prepare (sampleRate, blockSize);
 
     const int total = (int) (3.0 * sampleRate);
@@ -69,7 +72,8 @@ double shiftedFrequency (pedal::DropTuner::Mode mode, int semitones, double inpu
 double switchClickRatio (double sampleRate, int blockSize)
 {
     pedal::DropTuner tuner;
-    tuner.setSemitones (-2);
+    tuner.setEnabled (true);
+    tuner.setSemitones (-2.0f);
     tuner.prepare (sampleRate, blockSize);
 
     std::vector<float> block ((size_t) blockSize);
@@ -79,7 +83,7 @@ double switchClickRatio (double sampleRate, int blockSize)
     for (int start = 0; start + blockSize <= total; start += blockSize)
     {
         const double t = start / sampleRate;
-        tuner.setMode (t < 1.5 || t >= 2.5 ? pedal::DropTuner::Mode::fast : pedal::DropTuner::Mode::smooth);
+        tuner.setBuffer (t < 1.5 || t >= 2.5 ? pedal::DropTuner::Buffer::fast : pedal::DropTuner::Buffer::ms30);
         for (int i = 0; i < blockSize; ++i)
             block[(size_t) i] = 0.3f * (float) std::sin (juce::MathConstants<double>::twoPi * 196.0 * (start + i) / sampleRate);
         tuner.process (block.data(), blockSize);
@@ -111,8 +115,9 @@ int main()
     check (error.isEmpty(), ("load A2.nam " + error).toRawUTF8());
 
     pedal::ChainSettings settings;
-    settings.dropSemitones = -2;
-    settings.dropMode = pedal::DropTuner::Mode::fast;
+    settings.pitchOn = true;
+    settings.pitchSemitones = -2.0f;
+    settings.pitchBuffer = pedal::DropTuner::Buffer::fast;
     settings.gateThresholdDb = -60.0f;
 
     juce::AudioBuffer<float> buffer (1, blockSize);
@@ -132,15 +137,22 @@ int main()
             check (swapError.isEmpty(), ("load wavenet.nam mid-stream " + swapError).toRawUTF8());
         }
 
-        // Switch drop engines while playing, then turn the drop off and back on.
+        // Switch drop buffers while playing, sweep the pitch like a whammy,
+        // then turn it off and back on.
         if (b == numBlocks / 4)
-            settings.dropMode = pedal::DropTuner::Mode::smooth;
+        {
+            settings.pitchBuffer = pedal::DropTuner::Buffer::ms40;
+            settings.pitchTonalityHz = 6000.0f;
+        }
+        if (b > numBlocks * 3 / 8 && b < numBlocks / 2)
+            settings.pitchSemitones = -2.0f - 10.0f * (float) (b - numBlocks * 3 / 8) / (float) (numBlocks / 8);
         if (b == numBlocks * 5 / 8)
-            settings.dropSemitones = 0;
+            settings.pitchOn = false;
         if (b == numBlocks * 6 / 8)
         {
-            settings.dropMode = pedal::DropTuner::Mode::fast;
-            settings.dropSemitones = -5;
+            settings.pitchBuffer = pedal::DropTuner::Buffer::fast;
+            settings.pitchSemitones = -5.0f;
+            settings.pitchOn = true;
         }
 
         fillTestSignal (buffer, sampleRate, position);
@@ -163,29 +175,45 @@ int main()
     std::printf ("processed %.0f s of audio in %.2f s (%.1fx real time)\n", seconds, elapsed, realtimeFactor);
     check (realtimeFactor > 2.0, "runs at least 2x faster than real time");
 
-    using Mode = pedal::DropTuner::Mode;
-    const struct { Mode mode; const char* name; } modes[] = { { Mode::fast, "fast" }, { Mode::smooth, "smooth" } };
-    for (const auto& m : modes)
+    using Buffer = pedal::DropTuner::Buffer;
+    const struct { Buffer buffer; const char* name; double expectedMs; } buffers[] = {
+        { Buffer::fast, "fast", 0.0 }, { Buffer::ms20, "20 ms", 20.0 }, { Buffer::ms30, "30 ms", 30.0 },
+        { Buffer::ms40, "40 ms", 40.0 }, { Buffer::ms60, "60 ms", 60.0 } };
+    for (const auto& m : buffers)
     {
-        for (int semitones : { -2, -5, -12, 2 })
+        for (float semitones : { -2.0f, -5.0f, -12.0f, 2.0f, 24.0f, -24.0f, -2.5f })
         {
+            // Two octaves down needs more than the 20 ms window can resolve.
+            if (m.buffer == Buffer::ms20 && semitones < -12.0f)
+                continue;
             const double expected = 196.0 * std::pow (2.0, semitones / 12.0);
-            const double measured = shiftedFrequency (m.mode, semitones, 196.0, sampleRate, blockSize);
-            const auto what = juce::String::formatted ("%s mode %+d st: 196 Hz -> %.1f Hz (expected %.1f)",
+            const double measured = shiftedFrequency (m.buffer, semitones, 196.0, sampleRate, blockSize);
+            const auto what = juce::String::formatted ("%s buffer %+.1f st: 196 Hz -> %.1f Hz (expected %.1f)",
                                                        m.name, semitones, measured, expected);
             check (std::abs (measured - expected) < 0.01 * expected + 1.0, what.toRawUTF8());
         }
 
-        const int latency = chain.getDropTuner().getLatencySamples (m.mode, -2);
-        std::printf ("drop tuner latency, %s mode, -2 st: %d samples (%.1f ms)\n", m.name, latency, 1000.0 * latency / sampleRate);
-        check (latency < (int) (0.02 * sampleRate), "drop tuner adds less than 20 ms");
+        const double latencyMs = 1000.0 * chain.getDropTuner().getLatencySamples (m.buffer) / sampleRate;
+        std::printf ("drop tuner latency, %s buffer: %.1f ms\n", m.name, latencyMs);
+        if (m.expectedMs > 0.0)
+            check (std::abs (latencyMs - m.expectedMs) < 1.0, "buffer delay matches its label");
+        else
+            check (latencyMs < 20.0, "fast buffer adds less than 20 ms");
+    }
+
+    {
+        // Tonality leaves the highs alone but the fundamental still moves.
+        const double expected = 196.0 * std::pow (2.0, -2.0 / 12.0);
+        const double measured = shiftedFrequency (Buffer::ms30, -2.0f, 196.0, sampleRate, blockSize, 4000.0f);
+        const auto what = juce::String::formatted ("30 ms buffer with Tonality 4 kHz: 196 Hz -> %.1f Hz", measured);
+        check (std::abs (measured - expected) < 0.01 * expected + 1.0, what.toRawUTF8());
     }
 
     for (double rate : { 44100.0, 96000.0 })
         for (int size : { 32, 512 })
         {
             const double expected = 196.0 * std::pow (2.0, -2.0 / 12.0);
-            const double measured = shiftedFrequency (Mode::fast, -2, 196.0, rate, size);
+            const double measured = shiftedFrequency (Buffer::fast, -2.0f, 196.0, rate, size);
             const auto what = juce::String::formatted ("fast mode at %.0f Hz, block %d: 196 Hz -> %.1f Hz", rate, size, measured);
             check (std::abs (measured - expected) < 0.01 * expected + 1.0, what.toRawUTF8());
         }

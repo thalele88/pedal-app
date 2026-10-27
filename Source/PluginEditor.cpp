@@ -58,12 +58,17 @@ PedalAudioProcessorEditor::PedalAudioProcessorEditor (PedalAudioProcessor& p)
     dropLatencyLabel.setColour (juce::Label::textColourId, Colours::textDim);
     addAndMakeVisible (dropLatencyLabel);
 
-    fastButton.setButtonText (juce::String::fromUTF8 ("RÁPIDO"));
-    smoothButton.setButtonText ("SUAVE");
-    fastButton.onClick = [this] { setDropMode (pedal::DropTuner::Mode::fast); };
-    smoothButton.onClick = [this] { setDropMode (pedal::DropTuner::Mode::smooth); };
-    addAndMakeVisible (fastButton);
-    addAndMakeVisible (smoothButton);
+    if (auto* bufferParam = dynamic_cast<juce::AudioParameterChoice*> (processor.parameters.getParameter (ParamIDs::pitchBuffer)))
+        bufferBox.addItemList (bufferParam->choices, 1);
+    bufferAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        processor.parameters, ParamIDs::pitchBuffer, bufferBox);
+    stepAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+        processor.parameters, ParamIDs::pitchStep, stepToggle);
+    tonalityAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+        processor.parameters, ParamIDs::pitchTonalityOn, tonalityToggle);
+    addAndMakeVisible (bufferBox);
+    addAndMakeVisible (stepToggle);
+    addAndMakeVisible (tonalityToggle);
 
     for (int st : dropSteps)
     {
@@ -99,22 +104,20 @@ void PedalAudioProcessorEditor::setupKnob (Knob& k, const juce::String& paramId,
         processor.parameters, paramId, k.slider);
 }
 
+// "Padrão" turns Pitch off; the other buttons set the shift and turn it on.
 void PedalAudioProcessorEditor::setDrop (int semitones)
 {
-    if (auto* param = processor.parameters.getParameter (ParamIDs::drop))
-    {
-        param->beginChangeGesture();
-        param->setValueNotifyingHost (param->convertTo0to1 ((float) semitones));
-        param->endChangeGesture();
-    }
+    if (semitones != 0)
+        setParam (ParamIDs::pitch, (float) semitones);
+    setParam (ParamIDs::pitchOn, semitones != 0 ? 1.0f : 0.0f);
 }
 
-void PedalAudioProcessorEditor::setDropMode (pedal::DropTuner::Mode mode)
+void PedalAudioProcessorEditor::setParam (const juce::String& paramId, float value)
 {
-    if (auto* param = processor.parameters.getParameter (ParamIDs::dropMode))
+    if (auto* param = processor.parameters.getParameter (paramId))
     {
         param->beginChangeGesture();
-        param->setValueNotifyingHost (param->convertTo0to1 ((float) static_cast<int> (mode)));
+        param->setValueNotifyingHost (param->convertTo0to1 (value));
         param->endChangeGesture();
     }
 }
@@ -195,21 +198,23 @@ void PedalAudioProcessorEditor::timerCallback()
     if (di.hasClip())
         diFileButton.setButtonText (di.getFile().getFileNameWithoutExtension());
 
-    const int drop = (int) processor.parameters.getRawParameterValue (ParamIDs::drop)->load();
+    const bool pitchOn = processor.parameters.getRawParameterValue (ParamIDs::pitchOn)->load() > 0.5f;
+    const float pitch = processor.parameters.getRawParameterValue (ParamIDs::pitch)->load();
+    const int drop = pitchOn ? juce::roundToInt (pitch) : 0;
     for (int i = 0; i < dropButtons.size(); ++i)
         dropButtons[i]->setToggleState (dropSteps[i] == drop, juce::dontSendNotification);
 
-    const auto mode = juce::roundToInt (processor.parameters.getRawParameterValue (ParamIDs::dropMode)->load());
-    fastButton.setToggleState (mode == static_cast<int> (pedal::DropTuner::Mode::fast), juce::dontSendNotification);
-    smoothButton.setToggleState (mode == static_cast<int> (pedal::DropTuner::Mode::smooth), juce::dontSendNotification);
+    const auto buffer = juce::roundToInt (processor.parameters.getRawParameterValue (ParamIDs::pitchBuffer)->load());
+    const bool fast = buffer == static_cast<int> (pedal::DropTuner::Buffer::fast);
+    tonalityToggle.setEnabled (! fast); // Tonality only exists on the Signalsmith buffers
 
-    // The fast mode's delay depends on what is played, so show its range.
+    // The fast buffer's delay depends on what is played, so show its range.
     juce::String latencyText;
-    if (drop != 0)
-        latencyText = mode == static_cast<int> (pedal::DropTuner::Mode::fast)
+    if (pitchOn)
+        latencyText = fast
                         ? juce::String::fromUTF8 ("atraso ") + juce::String (juce::roundToInt (pedal::DropTuner::fastLatencyMinMs))
                               + " a " + juce::String (juce::roundToInt (pedal::DropTuner::fastLatencyMaxMs)) + " ms"
-                        : juce::String::fromUTF8 ("atraso ") + juce::String (juce::roundToInt (processor.getDropLatencyMs())) + " ms";
+                        : juce::String::fromUTF8 ("atraso ") + juce::String (juce::roundToInt (processor.getPitchLatencyMs())) + " ms";
     dropLatencyLabel.setText (latencyText, juce::dontSendNotification);
 }
 
@@ -274,8 +279,9 @@ void PedalAudioProcessorEditor::resized()
     auto dropArea = area.removeFromBottom (juce::jmax (80, area.getHeight() / 4));
     {
         auto top = dropArea.removeFromTop (28);
-        smoothButton.setBounds (top.removeFromRight (90).reduced (4, 2));
-        fastButton.setBounds (top.removeFromRight (90).reduced (4, 2));
+        bufferBox.setBounds (top.removeFromRight (110).reduced (4, 2));
+        stepToggle.setBounds (top.removeFromRight (80).reduced (4, 2));
+        tonalityToggle.setBounds (top.removeFromRight (100).reduced (4, 2));
         dropLatencyLabel.setBounds (top.removeFromRight (120));
         dropLabel.setBounds (top);
     }
