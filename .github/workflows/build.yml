@@ -31,3 +31,14 @@ jobs:
 
       - name: Engine smoke test
         run: ctest --test-dir build -C Release --output-on-failure
+
+      # Ready-to-run builds, downloadable from the run's "Artifacts" section.
+      - name: Upload app and plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: PedalApp-${{ runner.os }}
+          path: |
+            build/PedalApp_artefacts/Release/Standalone
+            build/PedalApp_artefacts/Release/VST3
+          if-no-files-found: error
+          retention-days: 30
