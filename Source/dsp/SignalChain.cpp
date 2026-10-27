@@ -15,6 +15,10 @@ void SignalChain::prepare (double sampleRate, int maxBlockSize)
     gate.setAttack (1.0f);
     gate.setRelease (80.0f);
 
+    limiter.prepare (monoSpec);
+    limiter.setThreshold (outputCeilingDb);
+    limiter.setRelease (100.0f);
+
     cabinet.prepare (monoSpec);
     dropTuner.prepare (sampleRate, maxBlockSize);
     amp.prepare (sampleRate, maxBlockSize);
@@ -26,6 +30,7 @@ void SignalChain::prepare (double sampleRate, int maxBlockSize)
 void SignalChain::reset()
 {
     gate.reset();
+    limiter.reset();
     cabinet.reset();
     dropTuner.reset();
 }
@@ -64,7 +69,10 @@ void SignalChain::process (juce::AudioBuffer<float>& buffer, const ChainSettings
         gate.process (context);
     }
 
-    dropTuner.setSemitones (s.dropSemitones);
+    dropTuner.setEnabled (s.pitchOn);
+    dropTuner.setSemitones (s.pitchSemitones);
+    dropTuner.setBuffer (s.pitchBuffer);
+    dropTuner.setTonality (s.pitchTonalityHz);
     dropTuner.process (mono, numSamples);
 
     auto* clean = cleanBuffer.getWritePointer (0);
@@ -84,6 +92,11 @@ void SignalChain::process (juce::AudioBuffer<float>& buffer, const ChainSettings
 
     outputGain.setTargetValue (juce::Decibels::decibelsToGain (s.outputGainDb));
     outputGain.applyGain (mono, numSamples);
+
+    // juce's Limiter raises its threshold to 0 dBFS and clips there; scale
+    // back so the level below the ceiling stays as it was.
+    limiter.process (context);
+    juce::FloatVectorOperations::multiply (mono, juce::Decibels::decibelsToGain (outputCeilingDb), numSamples);
 
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         buffer.copyFrom (ch, 0, mono, numSamples);

@@ -42,6 +42,29 @@ FetchContent_Declare(signalsmith_stretch
 
 FetchContent_MakeAvailable(juce nam eigen signalsmith_stretch)
 
+# --- Signalsmith Stretch with asymmetric windows ------------------------------
+# Its STFT already supports asymmetric windows (same frequency resolution for
+# much less delay), but SignalsmithStretch::configure() has no argument for it.
+# We generate a copy of the header that adds one, and fail loudly if a new
+# upstream version no longer matches.
+file(READ "${signalsmith_stretch_SOURCE_DIR}/signalsmith-stretch.h" STRETCH_HEADER)
+set(STRETCH_FROM_1 "void configure(int nChannels, int blockSamples, int intervalSamples, bool splitComputation=false) {")
+set(STRETCH_TO_1 "void configure(int nChannels, int blockSamples, int intervalSamples, bool splitComputation=false, Sample windowAsymmetry=0) {")
+set(STRETCH_FROM_2 "stft.setInterval(intervalSamples, stft.kaiser);")
+set(STRETCH_TO_2 "stft.setInterval(intervalSamples, stft.kaiser, windowAsymmetry);")
+foreach(N 1 2)
+    string(FIND "${STRETCH_HEADER}" "${STRETCH_FROM_${N}}" STRETCH_FOUND)
+    if (STRETCH_FOUND EQUAL -1)
+        message(FATAL_ERROR "signalsmith-stretch.h changed upstream; update the asymmetric window patch in CMakeLists.txt")
+    endif()
+    string(REPLACE "${STRETCH_FROM_${N}}" "${STRETCH_TO_${N}}" STRETCH_HEADER "${STRETCH_HEADER}")
+endforeach()
+set(PEDAL_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
+file(WRITE "${PEDAL_GENERATED_DIR}/signalsmith-stretch-asym.h.tmp" "${STRETCH_HEADER}")
+# copy only when the content changed, so reconfiguring does not force a rebuild
+configure_file("${PEDAL_GENERATED_DIR}/signalsmith-stretch-asym.h.tmp"
+               "${PEDAL_GENERATED_DIR}/signalsmith-stretch-asym.h" COPYONLY)
+
 # --- NAM core -----------------------------------------------------------------
 file(GLOB NAM_SOURCES "${nam_SOURCE_DIR}/NAM/*.cpp" "${nam_SOURCE_DIR}/NAM/*/*.cpp")
 add_library(nam_core STATIC ${NAM_SOURCES})
@@ -66,8 +89,10 @@ add_library(pedal_dsp STATIC
     Source/dsp/AmpModel.cpp
     Source/dsp/DropTuner.cpp
     Source/dsp/SignalChain.cpp
+    Source/dsp/SpliceShifter.cpp
     Source/dsp/TestInputPlayer.cpp)
 target_include_directories(pedal_dsp PUBLIC Source)
+target_include_directories(pedal_dsp SYSTEM PRIVATE "${PEDAL_GENERATED_DIR}")
 # NAM registers its model architectures from static initialisers, so the whole
 # archive must be linked or the linker drops them and every model fails to load.
 target_link_libraries(pedal_dsp
@@ -100,7 +125,10 @@ target_sources(PedalApp PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp)
 
+# JUCE_ASIO: lets the standalone app use ASIO drivers on Windows (the lowest
+# latency there). JUCE ships the ASIO SDK headers, so nothing else is needed.
 target_compile_definitions(PedalApp PUBLIC
+    JUCE_ASIO=1
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0)
 
@@ -123,4 +151,10 @@ if (PEDAL_BUILD_TESTS)
         juce::juce_recommended_config_flags)
     enable_testing()
     add_test(NAME EngineSmokeTest COMMAND EngineSmokeTest)
+
+    # Renders a DI recording through both drop modes to compare them by ear.
+    juce_add_console_app(DropCompare PRODUCT_NAME "DropCompare")
+    target_sources(DropCompare PRIVATE Tests/DropCompare.cpp)
+    target_link_libraries(DropCompare PRIVATE pedal_dsp
+        juce::juce_recommended_config_flags)
 endif()

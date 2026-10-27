@@ -54,6 +54,22 @@ PedalAudioProcessorEditor::PedalAudioProcessorEditor (PedalAudioProcessor& p)
     dropLabel.setColour (juce::Label::textColourId, Colours::textDim);
     addAndMakeVisible (dropLabel);
 
+    dropLatencyLabel.setJustificationType (juce::Justification::centredRight);
+    dropLatencyLabel.setColour (juce::Label::textColourId, Colours::textDim);
+    addAndMakeVisible (dropLatencyLabel);
+
+    if (auto* bufferParam = dynamic_cast<juce::AudioParameterChoice*> (processor.parameters.getParameter (ParamIDs::pitchBuffer)))
+        bufferBox.addItemList (bufferParam->choices, 1);
+    bufferAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        processor.parameters, ParamIDs::pitchBuffer, bufferBox);
+    stepAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+        processor.parameters, ParamIDs::pitchStep, stepToggle);
+    tonalityAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+        processor.parameters, ParamIDs::pitchTonalityOn, tonalityToggle);
+    addAndMakeVisible (bufferBox);
+    addAndMakeVisible (stepToggle);
+    addAndMakeVisible (tonalityToggle);
+
     for (int st : dropSteps)
     {
         auto* b = dropButtons.add (new juce::TextButton (st == 0 ? juce::String::fromUTF8 ("Padrão") : juce::String (st)));
@@ -88,12 +104,20 @@ void PedalAudioProcessorEditor::setupKnob (Knob& k, const juce::String& paramId,
         processor.parameters, paramId, k.slider);
 }
 
+// "Padrão" turns Pitch off; the other buttons set the shift and turn it on.
 void PedalAudioProcessorEditor::setDrop (int semitones)
 {
-    if (auto* param = processor.parameters.getParameter (ParamIDs::drop))
+    if (semitones != 0)
+        setParam (ParamIDs::pitch, (float) semitones);
+    setParam (ParamIDs::pitchOn, semitones != 0 ? 1.0f : 0.0f);
+}
+
+void PedalAudioProcessorEditor::setParam (const juce::String& paramId, float value)
+{
+    if (auto* param = processor.parameters.getParameter (paramId))
     {
         param->beginChangeGesture();
-        param->setValueNotifyingHost (param->convertTo0to1 ((float) semitones));
+        param->setValueNotifyingHost (param->convertTo0to1 (value));
         param->endChangeGesture();
     }
 }
@@ -174,9 +198,24 @@ void PedalAudioProcessorEditor::timerCallback()
     if (di.hasClip())
         diFileButton.setButtonText (di.getFile().getFileNameWithoutExtension());
 
-    const int drop = (int) processor.parameters.getRawParameterValue (ParamIDs::drop)->load();
+    const bool pitchOn = processor.parameters.getRawParameterValue (ParamIDs::pitchOn)->load() > 0.5f;
+    const float pitch = processor.parameters.getRawParameterValue (ParamIDs::pitch)->load();
+    const int drop = pitchOn ? juce::roundToInt (pitch) : 0;
     for (int i = 0; i < dropButtons.size(); ++i)
         dropButtons[i]->setToggleState (dropSteps[i] == drop, juce::dontSendNotification);
+
+    const auto buffer = juce::roundToInt (processor.parameters.getRawParameterValue (ParamIDs::pitchBuffer)->load());
+    const bool fast = buffer == static_cast<int> (pedal::DropTuner::Buffer::fast);
+    tonalityToggle.setEnabled (! fast); // Tonality only exists on the Signalsmith buffers
+
+    // The fast buffer's delay depends on what is played, so show its range.
+    juce::String latencyText;
+    if (pitchOn)
+        latencyText = fast
+                        ? juce::String::fromUTF8 ("atraso ") + juce::String (juce::roundToInt (pedal::DropTuner::fastLatencyMinMs))
+                              + " a " + juce::String (juce::roundToInt (pedal::DropTuner::fastLatencyMaxMs)) + " ms"
+                        : juce::String::fromUTF8 ("atraso ") + juce::String (juce::roundToInt (processor.getPitchLatencyMs())) + " ms";
+    dropLatencyLabel.setText (latencyText, juce::dontSendNotification);
 }
 
 void PedalAudioProcessorEditor::paint (juce::Graphics& g)
@@ -238,7 +277,14 @@ void PedalAudioProcessorEditor::resized()
     cabToggle.setBounds (area.removeFromTop (28).withSizeKeepingCentre (160, 28));
 
     auto dropArea = area.removeFromBottom (juce::jmax (80, area.getHeight() / 4));
-    dropLabel.setBounds (dropArea.removeFromTop (22));
+    {
+        auto top = dropArea.removeFromTop (28);
+        bufferBox.setBounds (top.removeFromRight (110).reduced (4, 2));
+        stepToggle.setBounds (top.removeFromRight (80).reduced (4, 2));
+        tonalityToggle.setBounds (top.removeFromRight (100).reduced (4, 2));
+        dropLatencyLabel.setBounds (top.removeFromRight (120));
+        dropLabel.setBounds (top);
+    }
     {
         const int w = dropArea.getWidth() / dropButtons.size();
         for (auto* b : dropButtons)

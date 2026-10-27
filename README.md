@@ -11,8 +11,15 @@ tocar ao vivo.
 ## O que já funciona
 
 - Carregar uma captura `.nam` do computador (A1 e A2) e um IR de caixa `.wav`.
-- Cadeia: entrada → gate → afinação → amp NAM → caixa → mix limpo → saída.
-- Drop de afinação polifônico de +12 a −12 semitons (botões de atalho de 0 a −12).
+- Cadeia: entrada → gate → afinação → amp NAM → caixa → mix limpo → saída → limitador de segurança (nunca passa de −1 dBFS).
+- Drop de afinação (Pitch, no estilo do plugin do TONE3000): liga/desliga,
+  de −24 a +24 semitons, **STEP** (semitons inteiros ou contínuo, tipo whammy),
+  **Tonality** (deixa os agudos sem mudar) e **Buffer**:
+  - **Rápido** (padrão): uns 7 a 10 ms em notas soltas, 15 ms em acordes e
+    19 ms no baixo. Ataque firme; em acordes cheios pode tremular de leve.
+  - **20 / 30 / 40 / 60 ms**: atraso fixo igual ao número; quanto maior, mais
+    limpo (principalmente no grave).
+- ASIO no Windows (escolha o driver em Options → Audio/MIDI Settings).
 - Troca de captura sem estalo: a nova entra com crossfade e nada é carregado na
   thread de áudio.
 - **Modo de teste sem interface:** toca uma gravação limpa (DI) de guitarra ou
@@ -69,8 +76,19 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Ele processa 10 segundos de áudio com as capturas de exemplo do NAM, troca de
-captura no meio e confere que não sai NaN, que não fica mudo e que roda bem mais
-rápido que tempo real.
+captura e de modo do drop no meio e confere que não sai NaN, que não fica mudo,
+que roda bem mais rápido que tempo real e que o drop afina certo nos dois modos.
+
+### Comparar os modos do drop no seu som
+
+Grave a guitarra ou o baixo **sem amp** (DI, `.wav`) e rode:
+
+```bash
+build/DropCompare_artefacts/Release/DropCompare minha_gravacao.wav -2
+```
+
+Ele cria um arquivo para cada buffer (`_rapido`, `_20ms`, `_30ms`, `_40ms`,
+`_60ms`) ao lado, já alinhados com o original, para ouvir e comparar.
 
 ## Usando no standalone
 
@@ -96,9 +114,10 @@ rápido que tempo real.
 
 ## Limitações conhecidas
 
-- O drop de afinação adiciona **cerca de 30 ms** de latência quando está ligado
-  (em "Padrão" não adiciona nada). É o ponto que mais precisa de teste com
-  instrumento de verdade.
+- O drop de afinação adiciona de **7 a 20 ms** de latência quando está ligado,
+  conforme o modo e o que você toca (em "Padrão" não adiciona nada). Antes eram
+  30 ms. Os números vêm de testes com sinais sintéticos; ainda falta ouvir com
+  guitarra e baixo de verdade.
 - Ainda não há conexão com o TONE3000, presets nem modo palco. Veja o roteiro
   em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
