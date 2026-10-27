@@ -37,14 +37,31 @@ struct Model
 struct Tone
 {
     juce::String id, title, creator, gear, format, pageUrl;
-    juce::Array<Model> models; // A2 first: they are the cheapest to run
+    juce::String imageUrl, creatorAvatarUrl; // lists must show both (TONE3000 brand rules)
+    juce::Array<Model> models; // NAM A2 only
 
     static Tone fromVar (const juce::var&);
 };
 
+// The lists the free API tier allows apps to show (catalog search is not).
+enum class ToneList { favorites, trending, latest, downloaded, created };
+
+struct ListResult
+{
+    juce::String error;
+    juce::Array<Tone> tones; // NAM tones only, models not filled in
+};
+
+struct ToneResult
+{
+    juce::String error;
+    Tone tone; // with its models
+};
+
 struct SelectResult
 {
-    enum class Status { selected, canceled, failed };
+    // connected: a sign-in without picking a tone finished.
+    enum class Status { selected, connected, canceled, failed };
     Status status = Status::failed;
     juce::String error;
     Tone tone;
@@ -53,15 +70,16 @@ struct SelectResult
 // Everything the app does with TONE3000, following the official API:
 //
 //   - Sign-in: OAuth 2.0 + PKCE with the public client_id (no secret in the
-//     app). Desktop uses the system browser and a loopback redirect.
+//     app). The authorize page is shown in a WebView inside the app (see
+//     Tone3000Panel), or in the system browser with a loopback redirect.
 //   - Picking a tone: the `select_tone` flow, where the user browses the
 //     catalog on tone3000.com and we get the tone_id back.
-//   - Getting a model: GET /models?tone_id= for its model_url, then the file
+//   - Getting a model: GET /models?tone_id=&architecture=2 for its model_url, then the file
 //     itself with the Bearer token. The JSON goes to AmpModel::loadFromJson.
 //   - Offline copies only for models a preset uses (see ModelCache).
 //   - At most 90 requests per minute across all plugin instances (limit is 100).
 //
-// Threads: selectTone()/cancelSelect() on the message thread; fetchModelJson()
+// Threads: the authorize calls on the message thread; fetchModelJson()
 // on a background thread only (it blocks on the network). Nothing here may
 // ever run on the audio thread.
 class Service
@@ -75,11 +93,24 @@ public:
     bool isConnected() const;
     void disconnect();
 
-    // Opens the TONE3000 catalog in the browser. `onDone` runs once, on the
-    // message thread, with the chosen tone and its models.
-    void selectTone (std::function<void (SelectResult)> onDone);
-    void cancelSelect();
-    bool isSelecting() const { return selecting; }
+    // Starts a sign-in (with the catalog when `selectTone` is true) and returns
+    // the authorize URL for the caller to show. The caller hands the query
+    // string of the redirect to `redirectUri` to completeAuthorize(). `onDone`
+    // runs once, on the message thread, with the chosen tone and its models.
+    juce::URL beginAuthorize (const juce::String& redirectUri, bool selectTone, bool showMenuBar,
+                              std::function<void (SelectResult)> onDone);
+    void completeAuthorize (const juce::String& redirectQuery);
+    void cancelAuthorize();
+    bool isAuthorizing() const { return authorizing; }
+    juce::String getAuthorizeRedirectUri() const { return authRedirectUri; }
+
+    // The same flow in the system browser, with the loopback receiver.
+    void selectToneInBrowser (std::function<void (SelectResult)> onDone);
+
+    // Signed-in lists for an in-app browser. `onDone` runs on the message thread.
+    void listTones (ToneList, std::function<void (ListResult)> onDone);
+    // A tone from a list, with its models, ready for the capture picker.
+    void getTone (const juce::String& toneId, std::function<void (ToneResult)> onDone);
 
     // Blocking, background threads only. Puts the .nam JSON of `modelId` in
     // `namJsonOut` and returns an empty string, or returns an error message.
@@ -129,10 +160,10 @@ private:
     bool refreshNow();
     juce::String exchangeCode (const juce::String& code, const juce::String& verifier, const juce::String& redirectUri);
     juce::String fetchTone (const juce::String& toneId, Tone& out);
+    juce::String fetchList (ToneList, juce::Array<Tone>& out);
     juce::String listModels (const juce::String& toneId, juce::Array<Model>& out);
     juce::String findModelUrl (const juce::String& toneId, const juce::String& modelId, juce::String& urlOut);
-    void handleRedirect (const juce::String& query, const juce::String& redirectUri);
-    void finishSelect (SelectResult);
+    void finishAuthorize (SelectResult);
 
     Tokens currentTokens() const;
     void storeTokens (const Tokens&);
@@ -154,8 +185,9 @@ private:
 
     LoopbackServer server;
     oauth::Pkce pkce;
-    std::function<void (SelectResult)> onSelectDone;
-    bool selecting = false;
+    std::function<void (SelectResult)> onAuthorizeDone;
+    juce::String authRedirectUri;
+    bool authorizing = false, authSelectsTone = false;
 
     juce::ThreadPool pool { 1 };
     std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>> (true);

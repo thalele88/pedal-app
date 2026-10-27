@@ -71,7 +71,7 @@ target_link_libraries(pedal_dsp
     PUBLIC "$<LINK_LIBRARY:WHOLE_ARCHIVE,nam_core>" signalsmith-stretch
            juce::juce_dsp juce::juce_audio_formats
     PRIVATE juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
-target_compile_definitions(pedal_dsp PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_compile_definitions(pedal_dsp PUBLIC JUCE_USE_CURL=0)
 set_target_properties(pedal_dsp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # --- TONE3000 connection ------------------------------------------------------
@@ -100,7 +100,7 @@ target_link_libraries(pedal_tone3000
     PUBLIC juce::juce_events juce::juce_cryptography
     PRIVATE juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 target_compile_definitions(pedal_tone3000
-    PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+    PUBLIC JUCE_USE_CURL=0
     PRIVATE PEDAL_TONE3000_CLIENT_ID="${PEDAL_TONE3000_CLIENT_ID}")
 if (APPLE)
     target_link_libraries(pedal_tone3000 PUBLIC "-framework Security")  # Keychain
@@ -116,6 +116,40 @@ if (APPLE)
     list(APPEND PEDAL_FORMATS AU)
 endif()
 
+# The TONE3000 catalog opens inside the app in a WebView: WKWebView on macOS
+# and Edge WebView2 on Windows. JUCE links the WebView2 SDK statically; the
+# SDK is a NuGet package, downloaded here so no NuGet tool is needed. The
+# WebView2 *runtime* ships with Windows 11 and almost every Windows 10.
+# Linux (CI only) builds without a WebView and uses the system browser.
+set(PEDAL_WEBVIEW ON)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(PEDAL_WEBVIEW OFF)
+endif()
+
+set(PEDAL_NEEDS_WEBVIEW2 FALSE)
+if (WIN32 AND PEDAL_WEBVIEW)
+    set(PEDAL_NEEDS_WEBVIEW2 TRUE)
+    set(PEDAL_WEBVIEW2_VERSION "1.0.1901.177")
+    set(webview2_root "${CMAKE_BINARY_DIR}/webview2")
+    set(webview2_pkg "${webview2_root}/Microsoft.Web.WebView2.${PEDAL_WEBVIEW2_VERSION}")
+    if (NOT EXISTS "${webview2_pkg}/build/native/include/WebView2.h")
+        message(STATUS "Downloading the Microsoft.Web.WebView2 ${PEDAL_WEBVIEW2_VERSION} SDK")
+        file(DOWNLOAD
+            "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/${PEDAL_WEBVIEW2_VERSION}"
+            "${webview2_root}/webview2.nupkg"
+            STATUS webview2_status)
+        list(GET webview2_status 0 webview2_code)
+        if (NOT webview2_code EQUAL 0)
+            message(FATAL_ERROR "WebView2 SDK download failed (${webview2_status}). "
+                "Pass -DJUCE_WEBVIEW2_PACKAGE_LOCATION=<folder with Microsoft.Web.WebView2.*>.")
+        endif()
+        file(ARCHIVE_EXTRACT INPUT "${webview2_root}/webview2.nupkg" DESTINATION "${webview2_pkg}")
+    endif()
+    if (NOT JUCE_WEBVIEW2_PACKAGE_LOCATION)
+        set(JUCE_WEBVIEW2_PACKAGE_LOCATION "${webview2_root}")
+    endif()
+endif()
+
 juce_add_plugin(PedalApp
     COMPANY_NAME "Thales"
     BUNDLE_ID "com.thalele88.pedalapp"
@@ -127,15 +161,19 @@ juce_add_plugin(PedalApp
     NEEDS_MIDI_OUTPUT FALSE
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "O Pedal App precisa da entrada de áudio para processar a guitarra ou o baixo."
+    NEEDS_WEBVIEW2 ${PEDAL_NEEDS_WEBVIEW2}
     FORMATS ${PEDAL_FORMATS})
 
 target_sources(PedalApp PRIVATE
     Source/PluginProcessor.cpp
-    Source/PluginEditor.cpp)
+    Source/PluginEditor.cpp
+    Source/tone3000/Tone3000Panel.cpp)
 
 target_compile_definitions(PedalApp PUBLIC
     JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_DISPLAY_SPLASH_SCREEN=0)
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    JUCE_WEB_BROWSER=$<BOOL:${PEDAL_WEBVIEW}>
+    $<$<BOOL:${PEDAL_NEEDS_WEBVIEW2}>:JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1>)
 
 target_link_libraries(PedalApp
     PRIVATE pedal_dsp

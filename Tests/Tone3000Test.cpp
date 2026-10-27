@@ -111,8 +111,10 @@ void testParsing()
     using namespace pedal::tone3000;
 
     const auto tone = Tone::fromVar (juce::JSON::parse (R"({"id":42,"title":"JCM800","gear":"amp","format":"nam",
-        "user":{"username":"thales","display_name":null}})"));
+        "images":["https://img/1.jpg","https://img/2.jpg"],
+        "user":{"username":"thales","display_name":null,"avatar_url":"https://img/a.png"}})"));
     check (tone.id == "42" && tone.title == "JCM800" && tone.creator == "thales", "tone parsing falls back to username");
+    check (tone.imageUrl == "https://img/1.jpg" && tone.creatorAvatarUrl == "https://img/a.png", "tone image and avatar for lists");
 
     Tone t;
     auto add = [&t] (const char* id, const char* arch, const char* size)

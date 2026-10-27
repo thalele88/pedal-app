@@ -47,6 +47,11 @@ juce::String error = t3k.fetchModelJson (toneId, modelId, namJson, "presets");
 t3k.retainOffline ("presets", modelIdsDosPresets);
 ```
 
+  A tela fica em `Source/tone3000/Tone3000Panel.*` (componente independente:
+  site do TONE3000 num WebView + listas). Qualquer layout pode montá-la, por
+  exemplo atrás de uma aba "T3K" na lateral; ela avisa a escolha por
+  `onModelChosen (tone, model)`. Só NAM A2.
+
   O processador usa o dono `"current"` para a captura que está no amp (é o que o
   estado do plugin restaura). Depois do JSON, o carregamento continua sendo
   `AmpModel::loadFromJson` fora da thread de áudio.

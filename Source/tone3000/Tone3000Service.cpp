@@ -65,11 +65,15 @@ Tone Tone::fromVar (const juce::var& v)
     t.format = str (v, "format");
     t.pageUrl = str (v, "url");
 
+    if (auto* images = v.getProperty ("images", {}).getArray(); images != nullptr && ! images->isEmpty())
+        t.imageUrl = images->getFirst().toString();
+
     // display_name is only set for verified creators.
     const auto user = v.getProperty ("user", {});
     t.creator = str (user, "display_name");
     if (t.creator.isEmpty())
         t.creator = str (user, "username");
+    t.creatorAvatarUrl = str (user, "avatar_url");
     return t;
 }
 
@@ -115,7 +119,7 @@ Service::Service (juce::String id, juce::File cacheDirectory)
     server.onCallback = [this, flag = alive] (juce::String query)
     {
         if (flag->load())
-            handleRedirect (query, server.getRedirectUri());
+            completeAuthorize (query);
     };
 }
 
@@ -340,29 +344,24 @@ juce::String Service::listModels (const juce::String& toneId, juce::Array<Model>
 {
     out.clear();
 
-    // Without `architecture` the API returns A1 + custom models only, so ask
-    // for A2 first (cheapest to run) and then for the rest.
-    for (const char* architecture : { "2", "" })
+    // Thales only wants NAM A2 captures (lightest to run live). Without
+    // `architecture` the API would return A1 + custom models instead.
+    const auto url = juce::URL (juce::String (apiOrigin) + "/api/v1/models")
+                         .withParameter ("tone_id", toneId)
+                         .withParameter ("architecture", "2")
+                         .withParameter ("page_size", "100");
+
+    const auto r = authorizedGet (url);
+    if (! r.ok())
+        return describe (r);
+
+    if (auto* data = r.json().getProperty ("data", {}).getArray())
     {
-        auto url = juce::URL (juce::String (apiOrigin) + "/api/v1/models")
-                       .withParameter ("tone_id", toneId)
-                       .withParameter ("page_size", "100");
-        if (*architecture != 0)
-            url = url.withParameter ("architecture", architecture);
-
-        const auto r = authorizedGet (url);
-        if (! r.ok())
-            return describe (r);
-
-        if (auto* data = r.json().getProperty ("data", {}).getArray())
+        for (const auto& item : *data)
         {
-            for (const auto& item : *data)
-            {
-                auto model = Model::fromVar (item);
-                const bool seen = std::any_of (out.begin(), out.end(), [&] (const Model& m) { return m.id == model.id; });
-                if (model.id.isNotEmpty() && model.url.isNotEmpty() && ! seen)
-                    out.add (model);
-            }
+            auto model = Model::fromVar (item);
+            if (model.id.isNotEmpty() && model.url.isNotEmpty())
+                out.add (model);
         }
     }
 
@@ -412,6 +411,83 @@ juce::String Service::fetchTone (const juce::String& toneId, Tone& out)
     return listModels (toneId, out.models);
 }
 
+juce::String Service::fetchList (ToneList list, juce::Array<Tone>& out)
+{
+    out.clear();
+
+    juce::String path;
+    bool paginated = true;
+    switch (list)
+    {
+        case ToneList::favorites:  path = "favorited"; break;
+        case ToneList::downloaded: path = "downloaded"; break;
+        case ToneList::created:    path = "created"; break;
+        case ToneList::trending:   path = "trending"; paginated = false; break;
+        case ToneList::latest:     path = "latest"; paginated = false; break;
+    }
+
+    auto url = juce::URL (juce::String (apiOrigin) + "/api/v1/tones/" + path);
+    if (paginated)
+        url = url.withParameter ("page_size", "100");
+
+    const auto r = authorizedGet (url);
+    if (! r.ok())
+        return describe (r);
+
+    if (auto* data = r.json().getProperty ("data", {}).getArray())
+    {
+        for (const auto& item : *data)
+        {
+            auto tone = Tone::fromVar (item);
+            // Only NAM captures (IRs are not used from TONE3000).
+            if (tone.id.isNotEmpty() && (tone.format.isEmpty() || tone.format.equalsIgnoreCase ("nam")))
+                out.add (tone);
+        }
+    }
+    return {};
+}
+
+void Service::listTones (ToneList list, std::function<void (ListResult)> onDone)
+{
+    pool.addJob ([this, list, onDone, flag = alive]
+    {
+        if (! flag->load())
+            return;
+
+        ListResult result;
+        if (! isConnected())
+            result.error = u8 ("Entre no TONE3000 para ver suas listas.");
+        else
+            result.error = fetchList (list, result.tones);
+
+        juce::MessageManager::callAsync ([onDone, flag, result]
+        {
+            if (flag->load() && onDone)
+                onDone (result);
+        });
+    });
+}
+
+void Service::getTone (const juce::String& toneId, std::function<void (ToneResult)> onDone)
+{
+    pool.addJob ([this, toneId, onDone, flag = alive]
+    {
+        if (! flag->load())
+            return;
+
+        ToneResult result;
+        result.error = fetchTone (toneId, result.tone);
+        if (result.error.isEmpty() && result.tone.models.isEmpty())
+            result.error = u8 ("Este tom não tem capturas NAM A2.");
+
+        juce::MessageManager::callAsync ([onDone, flag, result]
+        {
+            if (flag->load() && onDone)
+                onDone (result);
+        });
+    });
+}
+
 juce::String Service::fetchModelJson (const juce::String& toneId, const juce::String& modelId,
                                       juce::String& namJsonOut, const juce::String& keepOfflineFor)
 {
@@ -457,104 +533,130 @@ void Service::retainOffline (const juce::String& owner, const juce::StringArray&
     cache.retain (owner, modelIds);
 }
 
-// ---- select_tone flow (message thread) --------------------------------------
+// ---- Sign-in and select_tone (message thread) -------------------------------
 
-void Service::selectTone (std::function<void (SelectResult)> onDone)
+juce::URL Service::beginAuthorize (const juce::String& redirectUri, bool selectTone, bool showMenuBar,
+                                   std::function<void (SelectResult)> onDone)
 {
     JUCE_ASSERT_MESSAGE_THREAD
-    cancelSelect();
+    cancelAuthorize();
 
-    onSelectDone = std::move (onDone);
-    selecting = true;
+    onAuthorizeDone = std::move (onDone);
+    authorizing = true;
+    authSelectsTone = selectTone;
+    authRedirectUri = redirectUri;
 
     if (! hasClientId())
     {
-        finishSelect ({ SelectResult::Status::failed, u8 ("Esta versão foi compilada sem o client_id do TONE3000 (veja o README)."), {} });
-        return;
-    }
-
-    if (! server.start())
-    {
-        finishSelect ({ SelectResult::Status::failed, u8 ("Não consegui abrir uma porta local para o login."), {} });
-        return;
+        finishAuthorize ({ SelectResult::Status::failed, u8 ("Esta versão foi compilada sem o client_id do TONE3000 (veja o README)."), {} });
+        return {};
     }
 
     pkce = oauth::Pkce::generate();
 
     juce::StringPairArray extra;
-    extra.set ("prompt", "select_tone");
-    extra.set ("format", "nam");     // amp captures; the app loads IRs from files for now
-    extra.set ("architecture", "2"); // A2 catalog: the lightest models to run live
-    extra.set ("preview", "true");   // lets the user hear tones before picking
-    extra.set ("menubar", "true");
+    if (selectTone)
+    {
+        extra.set ("prompt", "select_tone");
+        extra.set ("format", "nam");     // amp captures only, no IRs
+        extra.set ("architecture", "2"); // NAM A2 only: the lightest models to run live
+        extra.set ("preview", "true");   // lets the user hear tones before picking
+    }
+    if (showMenuBar)
+        extra.set ("menubar", "true");
 
-    const auto url = oauth::authorizeUrl (apiOrigin, clientId, server.getRedirectUri(), pkce, extra);
+    return oauth::authorizeUrl (apiOrigin, clientId, redirectUri, pkce, extra);
+}
+
+void Service::selectToneInBrowser (std::function<void (SelectResult)> onDone)
+{
+    JUCE_ASSERT_MESSAGE_THREAD
+    cancelAuthorize();
+
+    if (! server.start())
+    {
+        if (onDone)
+            onDone ({ SelectResult::Status::failed, u8 ("Não consegui abrir uma porta local para o login."), {} });
+        return;
+    }
+
+    const auto url = beginAuthorize (server.getRedirectUri(), true, true, std::move (onDone));
+    if (! authorizing)
+        return; // already failed and reported
+
     if (! url.launchInDefaultBrowser())
     {
         server.stop();
-        finishSelect ({ SelectResult::Status::failed, u8 ("Não consegui abrir o navegador."), {} });
+        finishAuthorize ({ SelectResult::Status::failed, u8 ("Não consegui abrir o navegador."), {} });
     }
 }
 
-void Service::cancelSelect()
+void Service::cancelAuthorize()
 {
     JUCE_ASSERT_MESSAGE_THREAD
-    if (! selecting)
-        return;
     server.stop();
-    finishSelect ({ SelectResult::Status::canceled, {}, {} });
+    if (authorizing)
+        finishAuthorize ({ SelectResult::Status::canceled, {}, {} });
 }
 
-void Service::handleRedirect (const juce::String& query, const juce::String& redirectUri)
+void Service::completeAuthorize (const juce::String& query)
 {
-    if (! selecting)
+    JUCE_ASSERT_MESSAGE_THREAD
+    if (! authorizing)
         return;
 
     server.stop(); // one redirect per sign-in
 
     const auto cb = oauth::Callback::parse (query);
     if (pkce.state.isEmpty() || cb.state != pkce.state)
-        return finishSelect ({ SelectResult::Status::failed, u8 ("Login inválido (state diferente). Tente de novo."), {} });
+        return finishAuthorize ({ SelectResult::Status::failed, u8 ("Login inválido (state diferente). Tente de novo."), {} });
     if (cb.canceled && cb.code.isEmpty())
-        return finishSelect ({ SelectResult::Status::canceled, {}, {} });
+        return finishAuthorize ({ SelectResult::Status::canceled, {}, {} });
     if (cb.error.isNotEmpty())
-        return finishSelect ({ SelectResult::Status::failed, "TONE3000: " + cb.error, {} });
+        return finishAuthorize ({ SelectResult::Status::failed, "TONE3000: " + cb.error, {} });
     if (cb.code.isEmpty())
-        return finishSelect ({ SelectResult::Status::failed, u8 ("O TONE3000 não devolveu o código de login."), {} });
+        return finishAuthorize ({ SelectResult::Status::failed, u8 ("O TONE3000 não devolveu o código de login."), {} });
 
     // The verifier is single use: it leaves with this exchange.
     const auto verifier = std::exchange (pkce, {}).codeVerifier;
 
-    pool.addJob ([this, flag = alive, code = cb.code, toneId = cb.toneId, verifier, redirectUri]
+    pool.addJob ([this, flag = alive, code = cb.code, toneId = cb.toneId, verifier,
+                  redirectUri = authRedirectUri, wantsTone = authSelectsTone]
     {
         if (! flag->load())
             return;
 
         SelectResult result;
         auto error = exchangeCode (code, verifier, redirectUri);
-        if (error.isEmpty() && toneId.isEmpty())
-            error = u8 ("Nenhum tom foi escolhido.");
-        if (error.isEmpty())
-            error = fetchTone (toneId, result.tone);
-        if (error.isEmpty() && result.tone.models.isEmpty())
-            error = u8 ("Este tom não tem capturas NAM que o app consiga abrir.");
+        if (error.isEmpty() && wantsTone)
+        {
+            if (toneId.isEmpty())
+                error = u8 ("Nenhum tom foi escolhido.");
+            else
+                error = fetchTone (toneId, result.tone);
+            if (error.isEmpty() && result.tone.models.isEmpty())
+                error = u8 ("Este tom não tem capturas NAM A2.");
+        }
 
-        result.status = error.isEmpty() ? SelectResult::Status::selected : SelectResult::Status::failed;
+        if (error.isNotEmpty())
+            result.status = SelectResult::Status::failed;
+        else
+            result.status = wantsTone ? SelectResult::Status::selected : SelectResult::Status::connected;
         result.error = error;
 
         juce::MessageManager::callAsync ([this, flag, result]
         {
             if (flag->load())
-                finishSelect (result);
+                finishAuthorize (result);
         });
     });
 }
 
-void Service::finishSelect (SelectResult result)
+void Service::finishAuthorize (SelectResult result)
 {
-    selecting = false;
+    authorizing = false;
     pkce = {};
-    if (auto done = std::exchange (onSelectDone, nullptr))
+    if (auto done = std::exchange (onAuthorizeDone, nullptr))
         done (std::move (result));
 }
 

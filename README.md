@@ -82,12 +82,17 @@ precisam de internet (PKCE, retorno do login, limite de pedidos e cache).
 2. O JUCE silencia a entrada na primeira vez para evitar microfonia: desmarque
    "Mute audio input" na mesma tela.
 3. Clique em **AMP** para escolher um `.nam` e em **CAIXA** para escolher um IR.
-4. Ou clique em **TONE3000**: na primeira vez aparece uma explicação e o
-   navegador abre para você entrar na sua conta. Escolha o tom no site; o app
-   recebe a escolha, mostra as capturas daquele tom (uma por canal/ajuste) e
-   carrega a que você clicar. Embaixo do nome aparece "Powered by TONE3000 ·
-   criador", como o TONE3000 pede. Nas próximas vezes o login já está salvo
-   (Keychain no Mac, protegido pelo Windows no PC).
+4. Ou clique em **TONE3000**: a tela do TONE3000 abre dentro do próprio app
+   (como no editor do M-VAVE MK300). Na primeira vez aparece uma explicação e
+   você entra na sua conta ali mesmo. Na aba **Catálogo** fica o site do
+   TONE3000, com voltar, avançar e recarregar; nas abas **Favoritos**, **Em
+   alta** e **Novidades** ficam as listas. Clique num tom, escolha a captura
+   (uma por canal/ajuste) e ela entra no AMP. Só aparecem capturas **NAM A2**.
+   Embaixo do nome aparece "Powered by TONE3000 · criador", como o TONE3000
+   pede. O login fica salvo (Keychain no Mac, protegido pelo Windows no PC).
+   No Windows o site roda no WebView2 da Microsoft, que já vem no Windows 11 e
+   em quase todo Windows 10; sem ele, o app oferece abrir o catálogo no
+   navegador.
 
 ### Sem internet no show
 
