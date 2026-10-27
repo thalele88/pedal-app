@@ -74,6 +74,18 @@ target_link_libraries(pedal_dsp
 target_compile_definitions(pedal_dsp PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 set_target_properties(pedal_dsp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# --- Presets and setlists (used by the plugin and the tests) -----------------
+add_library(pedal_presets STATIC
+    Source/presets/ModelBank.cpp
+    Source/presets/Preset.cpp
+    Source/presets/PresetLibrary.cpp
+    Source/presets/PresetManager.cpp
+    Source/presets/ToneRef.cpp)
+target_link_libraries(pedal_presets
+    PUBLIC pedal_dsp juce::juce_audio_processors
+    PRIVATE juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+set_target_properties(pedal_presets PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # --- Plugin + standalone app --------------------------------------------------
 set(PEDAL_FORMATS Standalone VST3)
 if (APPLE)
@@ -102,7 +114,7 @@ target_compile_definitions(PedalApp PUBLIC
     JUCE_DISPLAY_SPLASH_SCREEN=0)
 
 target_link_libraries(PedalApp
-    PRIVATE pedal_dsp
+    PRIVATE pedal_presets
             juce::juce_audio_utils
     PUBLIC juce::juce_recommended_config_flags
            juce::juce_recommended_lto_flags
@@ -118,6 +130,16 @@ if (PEDAL_BUILD_TESTS)
         PEDAL_EXAMPLE_AUDIO_DIR="${nam_SOURCE_DIR}/example_audio")
     target_link_libraries(EngineSmokeTest PRIVATE pedal_dsp
         juce::juce_recommended_config_flags)
+
+    juce_add_console_app(PresetTest PRODUCT_NAME "PresetTest")
+    target_sources(PresetTest PRIVATE Tests/PresetTest.cpp)
+    target_compile_definitions(PresetTest PRIVATE
+        PEDAL_EXAMPLE_MODELS_DIR="${nam_SOURCE_DIR}/example_models"
+        JUCE_MODAL_LOOPS_PERMITTED=1)
+    target_link_libraries(PresetTest PRIVATE pedal_presets
+        juce::juce_recommended_config_flags)
+
     enable_testing()
     add_test(NAME EngineSmokeTest COMMAND EngineSmokeTest)
+    add_test(NAME PresetTest COMMAND PresetTest)
 endif()

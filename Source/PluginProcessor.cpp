@@ -85,10 +85,12 @@ void PedalAudioProcessor::releaseResources()
     chain.reset();
 }
 
-void PedalAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void PedalAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
     juce::AudioProcessLoadMeasurer::ScopedTimer timer (loadMeasurer, buffer.getNumSamples());
+
+    presets.handleMidi (midi); // only flags a Program Change; the switch happens on the message thread
 
     pedal::ChainSettings settings;
     settings.inputGainDb = inputGain->load();
@@ -104,19 +106,7 @@ void PedalAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 
 void PedalAudioProcessor::loadAmpModelAsync (const juce::File& file, std::function<void (juce::String)> onDone)
 {
-    loaderPool.addJob ([this, file, onDone, aliveFlag = alive]
-    {
-        auto error = chain.getAmp().load (file);
-        juce::MessageManager::callAsync ([this, file, error, onDone, aliveFlag]
-        {
-            if (! aliveFlag->load())
-                return;
-            if (error.isEmpty())
-                ampModelFile = file;
-            if (onDone)
-                onDone (error);
-        });
-    });
+    presets.loadTone (pedal::ToneRef::fromFile (file), std::move (onDone));
 }
 
 void PedalAudioProcessor::loadTestInputAsync (const juce::File& file, std::function<void (juce::String)> onDone)
@@ -134,8 +124,7 @@ void PedalAudioProcessor::loadTestInputAsync (const juce::File& file, std::funct
 
 void PedalAudioProcessor::loadCabinet (const juce::File& file)
 {
-    cabinetFile = file;
-    chain.loadCabinet (file);
+    presets.loadIr (file);
 }
 
 void PedalAudioProcessor::timerCallback()
@@ -155,8 +144,7 @@ void PedalAudioProcessor::updateLatency()
 void PedalAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = parameters.copyState();
-    state.setProperty ("ampModel", ampModelFile.getFullPathName(), nullptr);
-    state.setProperty ("cabinet", cabinetFile.getFullPathName(), nullptr);
+    state.appendChild (presets.getState(), nullptr);
     state.setProperty ("testInput", testInput.getFile().getFullPathName(), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
@@ -169,15 +157,20 @@ void PedalAudioProcessor::setStateInformation (const void* data, int sizeInBytes
         return;
 
     auto state = juce::ValueTree::fromXml (*xml);
+    auto presetState = state.getChildWithName ("Presets");
+    state.removeChild (presetState, nullptr);
     parameters.replaceState (state);
 
-    const juce::File model (state.getProperty ("ampModel").toString());
-    if (model.existsAsFile())
-        loadAmpModelAsync (model);
-
-    const juce::File cab (state.getProperty ("cabinet").toString());
-    if (cab.existsAsFile())
-        loadCabinet (cab);
+    if (! presetState.isValid())
+    {
+        // State saved before presets existed.
+        presetState = juce::ValueTree ("Presets");
+        const juce::File model (state.getProperty ("ampModel").toString());
+        if (model.existsAsFile())
+            presetState.setProperty ("tone", juce::JSON::toString (pedal::ToneRef::fromFile (model).toVar(), true), nullptr);
+        presetState.setProperty ("ir", state.getProperty ("cabinet"), nullptr);
+    }
+    presets.setState (presetState);
 
     // Remembers the DI file but never starts playing it on its own.
     const juce::File di (state.getProperty ("testInput").toString());

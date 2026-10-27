@@ -47,6 +47,8 @@ struct ToneRef
 
 ### 2. Presets e setlists (`Source/presets/`, branch `feat/presets`)
 
+Feito; detalhes em [PRESETS.md](PRESETS.md). O que estava planejado:
+
 - Preset em JSON: valores dos parâmetros + `ToneRef` do amp + caminho do IR.
 - Banco de presets em pasta do usuário, favoritos, setlists ordenadas.
 - Troca por MIDI Program Change e por botões na tela.
