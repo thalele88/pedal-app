@@ -92,6 +92,41 @@ int main()
     std::printf ("drop tuner latency: %d samples (%.1f ms)\n", chain.getDropTuner().getLatencySamples(),
                  1000.0 * chain.getDropTuner().getLatencySamples() / sampleRate);
 
+    // A 48 kHz capture on a 44.1 kHz interface (like the M-VAVE MK-300) must be
+    // resampled: no mismatch warning, and a steady sine should come out at
+    // about the same level as when the host runs at the capture's own rate.
+    {
+        auto sineRms = [&] (double hostRate)
+        {
+            pedal::AmpModel model;
+            model.prepare (hostRate, blockSize);
+            const auto err = model.load (models.getChildFile ("wavenet.nam"));
+            check (err.isEmpty(), ("load wavenet.nam at " + juce::String (hostRate) + " Hz " + err).toRawUTF8());
+            if (hostRate != 48000.0)
+                check (! model.hasSampleRateMismatch(), "no sample-rate warning at 44.1 kHz");
+
+            std::vector<float> block ((size_t) blockSize);
+            double sum = 0.0;
+            int64_t n = 0, pos = 0;
+            const int blocks = (int) (2.0 * hostRate / blockSize);
+            for (int b = 0; b < blocks; ++b)
+            {
+                for (int i = 0; i < blockSize; ++i, ++pos)
+                    block[(size_t) i] = 0.2f * (float) std::sin (juce::MathConstants<double>::twoPi * 220.0 * (double) pos / hostRate);
+                model.process (block.data(), blockSize);
+                if (b > blocks / 2) // skip the start-up
+                    for (float v : block) { sum += (double) v * v; ++n; }
+            }
+            return std::sqrt (sum / (double) n);
+        };
+
+        const double at48 = sineRms (48000.0);
+        const double at441 = sineRms (44100.0);
+        const double diffDb = 20.0 * std::log10 (at441 / at48);
+        std::printf ("220 Hz sine level at 44.1 kHz vs 48 kHz: %+.2f dB\n", diffDb);
+        check (std::isfinite (diffDb) && std::abs (diffDb) < 0.5, "resampled model matches the 48 kHz level within 0.5 dB");
+    }
+
     // Test input: a 48 kHz WAV played at a 44.1 kHz host rate, looped.
     {
         pedal::TestInputPlayer player;
