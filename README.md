@@ -20,7 +20,7 @@ tocar ao vivo.
   caixa do computador.
 - Medidor de CPU e aviso quando a captura foi treinada em outra taxa de amostragem.
 - Botão **TONE3000**: escolhe um tom no catálogo do TONE3000 e toca direto, sem
-  baixar arquivo à mão (precisa do `client_id`, veja abaixo).
+  baixar arquivo à mão.
 - Formatos: Standalone e VST3 (Windows/Mac/Linux) e AU (Mac).
 
 ## Como compilar
@@ -47,28 +47,18 @@ O resultado fica em `build/PedalApp_artefacts/Release/`:
 
 No Mac, para gerar um projeto do Xcode: `cmake -S . -B build-xcode -G Xcode`.
 
-### Ligar o TONE3000 (uma vez)
+### TONE3000
 
-O app usa a API oficial do TONE3000 com login OAuth. Para isso ele precisa de
-um `client_id`, que é a "publishable key" da sua conta de desenvolvedor:
+O app usa a API oficial do TONE3000 com login OAuth. A chave pública do app
+(`client_id`, a "publishable key" da conta de desenvolvedor) já está no
+`CMakeLists.txt`, então o build normal já vem com o botão TONE3000 funcionando.
 
-1. Entre (ou crie a conta grátis) em [tone3000.com](https://www.tone3000.com).
-2. Abra [tone3000.com/settings](https://www.tone3000.com/settings), procure a
-   parte de **API / desenvolvedor** e gere as chaves.
-3. Copie só a **publishable key** (é o `client_id`). **Não** use a secret key
-   (`t3k_cs_...`): ela nunca deve ir dentro do app.
-4. Não precisa cadastrar redirect URI: o login no PC volta para
-   `http://127.0.0.1:<porta>/callback`, que o TONE3000 aceita sempre.
-5. Configure o build com a chave (o CMake guarda, então é só uma vez por pasta
-   de build):
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DPEDAL_TONE3000_CLIENT_ID=SUA_PUBLISHABLE_KEY
-cmake --build build --config Release --parallel
-```
-
-Também funciona com a variável de ambiente `TONE3000_CLIENT_ID`. Sem a chave o
-app compila normal e o botão TONE3000 só explica o que falta.
+- A chave pública pode ficar no código: ela vai dentro do app de qualquer jeito.
+  A **secret key** (`t3k_cs_...`) nunca deve entrar no repositório nem no app.
+- Não precisa cadastrar redirect URI: o login no PC volta para
+  `http://127.0.0.1:<porta>/callback`, que o TONE3000 aceita sempre.
+- Para usar outra chave: `-DPEDAL_TONE3000_CLIENT_ID=...` no `cmake` ou a
+  variável de ambiente `TONE3000_CLIENT_ID`.
 
 O plano grátis da API é para projetos não comerciais e permite o fluxo
 `select_tone` que o app usa. O limite é 100 pedidos por minuto; o app fica em

@@ -75,12 +75,15 @@ target_compile_definitions(pedal_dsp PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 set_target_properties(pedal_dsp PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # --- TONE3000 connection ------------------------------------------------------
-# Publishable key (t3k_pub_...) from tone3000.com > Settings > API. It is meant
-# to ship inside apps (OAuth PKCE, no secret), but it is yours, so it is passed
-# at configure time instead of living in git:
-#   cmake -S . -B build -DPEDAL_TONE3000_CLIENT_ID=t3k_pub_...
-# CMake remembers it, so this is needed once per build folder.
-set(PEDAL_TONE3000_CLIENT_ID "$ENV{TONE3000_CLIENT_ID}" CACHE STRING "TONE3000 publishable key (t3k_pub_...)")
+# Publishable key (t3k_pub_...) of the app's TONE3000 developer account. It is
+# public by design and ships inside the app (OAuth PKCE, no secret), so it can
+# live here. Never put the secret key (t3k_cs_...) anywhere in this repo.
+# To use another key: -DPEDAL_TONE3000_CLIENT_ID=... or env TONE3000_CLIENT_ID.
+set(PEDAL_TONE3000_DEFAULT_CLIENT_ID "t3k_pub_HpEU5hrxJgkk6GXD_vPrRVYLt-sjZwTI")
+if (DEFINED ENV{TONE3000_CLIENT_ID})
+    set(PEDAL_TONE3000_DEFAULT_CLIENT_ID "$ENV{TONE3000_CLIENT_ID}")
+endif()
+set(PEDAL_TONE3000_CLIENT_ID "${PEDAL_TONE3000_DEFAULT_CLIENT_ID}" CACHE STRING "TONE3000 publishable key (t3k_pub_...)")
 if (NOT PEDAL_TONE3000_CLIENT_ID)
     message(STATUS "PEDAL_TONE3000_CLIENT_ID not set: the TONE3000 button will explain how to add it")
 endif()
