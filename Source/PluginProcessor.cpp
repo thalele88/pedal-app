@@ -10,6 +10,7 @@ PedalAudioProcessor::PedalAudioProcessor()
     inputGain = parameters.getRawParameterValue (ParamIDs::inputGain);
     gateThreshold = parameters.getRawParameterValue (ParamIDs::gateThreshold);
     drop = parameters.getRawParameterValue (ParamIDs::drop);
+    dropMode = parameters.getRawParameterValue (ParamIDs::dropMode);
     cleanBlend = parameters.getRawParameterValue (ParamIDs::cleanBlend);
     outputGain = parameters.getRawParameterValue (ParamIDs::outputGain);
     cabEnabled = parameters.getRawParameterValue (ParamIDs::cabEnabled);
@@ -48,6 +49,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout PedalAudioProcessor::createP
             return v == 0 ? juce::String::fromUTF8 ("Padrão") : (v > 0 ? "+" : "") + String (v) + " st";
         })));
 
+    // Index order must match pedal::DropTuner::Mode.
+    layout.add (std::make_unique<AudioParameterChoice> (
+        ParameterID { ParamIDs::dropMode, 1 }, "Modo do drop",
+        StringArray { juce::String::fromUTF8 ("Rápido"), "Suave" }, 0));
+
     layout.add (std::make_unique<AudioParameterFloat> (
         ParameterID { ParamIDs::cleanBlend, 1 }, "Limpo", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.0f,
         AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) {
@@ -74,6 +80,7 @@ bool PedalAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) co
 
 void PedalAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    currentSampleRate = sampleRate;
     chain.prepare (sampleRate, samplesPerBlock);
     loadMeasurer.reset (sampleRate, samplesPerBlock);
     updateLatency();
@@ -93,6 +100,7 @@ void PedalAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     settings.inputGainDb = inputGain->load();
     settings.gateThresholdDb = gateThreshold->load();
     settings.dropSemitones = juce::roundToInt (drop->load());
+    settings.dropMode = static_cast<pedal::DropTuner::Mode> (juce::roundToInt (dropMode->load()));
     settings.cleanBlend = cleanBlend->load();
     settings.outputGainDb = outputGain->load();
     settings.cabEnabled = cabEnabled->load() > 0.5f;
@@ -129,9 +137,20 @@ void PedalAudioProcessor::timerCallback()
     updateLatency();
 }
 
+int PedalAudioProcessor::currentDropLatencySamples() const
+{
+    const auto mode = static_cast<pedal::DropTuner::Mode> (juce::roundToInt (dropMode->load()));
+    return chain.getDropTuner().getLatencySamples (mode, juce::roundToInt (drop->load()));
+}
+
+double PedalAudioProcessor::getDropLatencyMs() const
+{
+    return 1000.0 * currentDropLatencySamples() / currentSampleRate;
+}
+
 void PedalAudioProcessor::updateLatency()
 {
-    const int latency = juce::roundToInt (drop->load()) != 0 ? chain.getDropTuner().getLatencySamples() : 0;
+    const int latency = currentDropLatencySamples();
     if (latency != getLatencySamples())
         setLatencySamples (latency);
 }

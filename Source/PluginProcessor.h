@@ -9,6 +9,7 @@ namespace ParamIDs
     inline constexpr auto inputGain = "inputGain";
     inline constexpr auto gateThreshold = "gateThreshold";
     inline constexpr auto drop = "drop";
+    inline constexpr auto dropMode = "dropMode";
     inline constexpr auto cleanBlend = "cleanBlend";
     inline constexpr auto outputGain = "outputGain";
     inline constexpr auto cabEnabled = "cabEnabled";
@@ -54,6 +55,9 @@ public:
     bool ampHasSampleRateMismatch() const { return chain.getAmp().hasSampleRateMismatch(); }
     juce::File getCabinetFile() const { return cabinetFile; }
 
+    // Delay the drop tuner adds with the current settings (0 in standard tuning).
+    double getDropLatencyMs() const;
+
     // 0..1 share of the audio callback time used by this plugin.
     double getCpuLoad() const { return loadMeasurer.getLoadAsProportion(); }
 
@@ -63,8 +67,10 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     void timerCallback() override;
     void updateLatency();
+    int currentDropLatencySamples() const;
 
     pedal::SignalChain chain;
+    double currentSampleRate = 48000.0;
     juce::AudioProcessLoadMeasurer loadMeasurer;
     juce::ThreadPool loaderPool { 1 };
 
@@ -75,6 +81,7 @@ private:
     std::atomic<float>* inputGain = nullptr;
     std::atomic<float>* gateThreshold = nullptr;
     std::atomic<float>* drop = nullptr;
+    std::atomic<float>* dropMode = nullptr;
     std::atomic<float>* cleanBlend = nullptr;
     std::atomic<float>* outputGain = nullptr;
     std::atomic<float>* cabEnabled = nullptr;

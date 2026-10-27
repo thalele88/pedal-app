@@ -41,6 +41,17 @@ PedalAudioProcessorEditor::PedalAudioProcessorEditor (PedalAudioProcessor& p)
     dropLabel.setColour (juce::Label::textColourId, Colours::textDim);
     addAndMakeVisible (dropLabel);
 
+    dropLatencyLabel.setJustificationType (juce::Justification::centredRight);
+    dropLatencyLabel.setColour (juce::Label::textColourId, Colours::textDim);
+    addAndMakeVisible (dropLatencyLabel);
+
+    fastButton.setButtonText (juce::String::fromUTF8 ("RÁPIDO"));
+    smoothButton.setButtonText ("SUAVE");
+    fastButton.onClick = [this] { setDropMode (pedal::DropTuner::Mode::fast); };
+    smoothButton.onClick = [this] { setDropMode (pedal::DropTuner::Mode::smooth); };
+    addAndMakeVisible (fastButton);
+    addAndMakeVisible (smoothButton);
+
     for (int st : dropSteps)
     {
         auto* b = dropButtons.add (new juce::TextButton (st == 0 ? juce::String::fromUTF8 ("Padrão") : juce::String (st)));
@@ -81,6 +92,16 @@ void PedalAudioProcessorEditor::setDrop (int semitones)
     {
         param->beginChangeGesture();
         param->setValueNotifyingHost (param->convertTo0to1 ((float) semitones));
+        param->endChangeGesture();
+    }
+}
+
+void PedalAudioProcessorEditor::setDropMode (pedal::DropTuner::Mode mode)
+{
+    if (auto* param = processor.parameters.getParameter (ParamIDs::dropMode))
+    {
+        param->beginChangeGesture();
+        param->setValueNotifyingHost (param->convertTo0to1 ((float) static_cast<int> (mode)));
         param->endChangeGesture();
     }
 }
@@ -135,6 +156,19 @@ void PedalAudioProcessorEditor::timerCallback()
     const int drop = (int) processor.parameters.getRawParameterValue (ParamIDs::drop)->load();
     for (int i = 0; i < dropButtons.size(); ++i)
         dropButtons[i]->setToggleState (dropSteps[i] == drop, juce::dontSendNotification);
+
+    const auto mode = juce::roundToInt (processor.parameters.getRawParameterValue (ParamIDs::dropMode)->load());
+    fastButton.setToggleState (mode == static_cast<int> (pedal::DropTuner::Mode::fast), juce::dontSendNotification);
+    smoothButton.setToggleState (mode == static_cast<int> (pedal::DropTuner::Mode::smooth), juce::dontSendNotification);
+
+    // The fast mode's delay depends on what is played, so show its range.
+    juce::String latencyText;
+    if (drop != 0)
+        latencyText = mode == static_cast<int> (pedal::DropTuner::Mode::fast)
+                        ? juce::String::fromUTF8 ("atraso ") + juce::String (juce::roundToInt (pedal::DropTuner::fastLatencyMinMs))
+                              + " a " + juce::String (juce::roundToInt (pedal::DropTuner::fastLatencyMaxMs)) + " ms"
+                        : juce::String::fromUTF8 ("atraso ") + juce::String (juce::roundToInt (processor.getDropLatencyMs())) + " ms";
+    dropLatencyLabel.setText (latencyText, juce::dontSendNotification);
 }
 
 void PedalAudioProcessorEditor::paint (juce::Graphics& g)
@@ -194,7 +228,13 @@ void PedalAudioProcessorEditor::resized()
     cabToggle.setBounds (area.removeFromTop (28).withSizeKeepingCentre (160, 28));
 
     auto dropArea = area.removeFromBottom (juce::jmax (80, area.getHeight() / 4));
-    dropLabel.setBounds (dropArea.removeFromTop (22));
+    {
+        auto top = dropArea.removeFromTop (28);
+        smoothButton.setBounds (top.removeFromRight (90).reduced (4, 2));
+        fastButton.setBounds (top.removeFromRight (90).reduced (4, 2));
+        dropLatencyLabel.setBounds (top.removeFromRight (120));
+        dropLabel.setBounds (top);
+    }
     {
         const int w = dropArea.getWidth() / dropButtons.size();
         for (auto* b : dropButtons)

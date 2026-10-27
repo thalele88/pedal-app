@@ -15,6 +15,7 @@ struct ChainSettings
     float inputGainDb = 0.0f;
     float gateThresholdDb = -100.0f; // -100 = gate off
     int dropSemitones = 0;
+    DropTuner::Mode dropMode = DropTuner::Mode::fast;
     float cleanBlend = 0.0f;         // 0..1, mostly for bass: keeps the low end clean
     float outputGainDb = 0.0f;
     bool cabEnabled = true;
@@ -32,6 +33,7 @@ public:
     AmpModel& getAmp() noexcept { return amp; }
     const AmpModel& getAmp() const noexcept { return amp; }
     DropTuner& getDropTuner() noexcept { return dropTuner; }
+    const DropTuner& getDropTuner() const noexcept { return dropTuner; }
 
     // Loads a cabinet impulse response. Safe from the message thread; the
     // convolution swaps it in on its own background thread.

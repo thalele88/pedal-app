@@ -12,7 +12,13 @@ tocar ao vivo.
 
 - Carregar uma captura `.nam` do computador (A1 e A2) e um IR de caixa `.wav`.
 - Cadeia: entrada → gate → afinação → amp NAM → caixa → mix limpo → saída.
-- Drop de afinação polifônico de +12 a −12 semitons (botões de atalho de 0 a −12).
+- Drop de afinação polifônico de +12 a −12 semitons (botões de atalho de 0 a −12),
+  com dois modos:
+  - **Rápido** (padrão): atraso de uns 7 a 10 ms em notas soltas, 15 ms em
+    acordes e 19 ms no baixo. Ataque firme e graves limpos; em acordes cheios
+    pode dar uma leve tremulada.
+  - **Suave**: 18 ms fixos, sem tremulada, mas o ataque fica mais macio e as
+    notas graves um pouco borradas.
 - Troca de captura sem estalo: a nova entra com crossfade e nada é carregado na
   thread de áudio.
 - Medidor de CPU e aviso quando a captura foi treinada em outra taxa de amostragem.
@@ -49,8 +55,19 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Ele processa 10 segundos de áudio com as capturas de exemplo do NAM, troca de
-captura no meio e confere que não sai NaN, que não fica mudo e que roda bem mais
-rápido que tempo real.
+captura e de modo do drop no meio e confere que não sai NaN, que não fica mudo,
+que roda bem mais rápido que tempo real e que o drop afina certo nos dois modos.
+
+### Comparar os modos do drop no seu som
+
+Grave a guitarra ou o baixo **sem amp** (DI, `.wav`) e rode:
+
+```bash
+build/DropCompare_artefacts/Release/DropCompare minha_gravacao.wav -2
+```
+
+Ele cria `minha_gravacao_drop-2_rapido.wav` e `minha_gravacao_drop-2_suave.wav`
+ao lado, já alinhados com o original, para ouvir e comparar.
 
 ## Usando no standalone
 
@@ -62,9 +79,10 @@ rápido que tempo real.
 
 ## Limitações conhecidas
 
-- O drop de afinação adiciona **cerca de 30 ms** de latência quando está ligado
-  (em "Padrão" não adiciona nada). É o ponto que mais precisa de teste com
-  instrumento de verdade.
+- O drop de afinação adiciona de **7 a 20 ms** de latência quando está ligado,
+  conforme o modo e o que você toca (em "Padrão" não adiciona nada). Antes eram
+  30 ms. Os números vêm de testes com sinais sintéticos; ainda falta ouvir com
+  guitarra e baixo de verdade.
 - Ainda não há conexão com o TONE3000, presets nem modo palco. Veja o roteiro
   em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

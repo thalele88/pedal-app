@@ -32,6 +32,7 @@ private:
     void chooseAmpModel();
     void chooseCabinet();
     void setDrop (int semitones);
+    void setDropMode (pedal::DropTuner::Mode mode);
 
     PedalAudioProcessor& processor;
     pedal::ui::PedalLookAndFeel lookAndFeel;
@@ -45,7 +46,9 @@ private:
 
     static constexpr int dropSteps[] = { 0, -1, -2, -3, -5, -7, -12 };
     juce::OwnedArray<juce::TextButton> dropButtons;
-    juce::Label dropLabel;
+    juce::Label dropLabel, dropLatencyLabel;
+    // Drop engine: "Rápido" (lowest delay) or "Suave" (no flutter on big chords).
+    juce::TextButton fastButton, smoothButton;
 
     juce::Rectangle<int> chainArea;
     std::unique_ptr<juce::FileChooser> fileChooser;

@@ -11,11 +11,11 @@ no áudio por troca atômica, como `pedal::AmpModel` já faz.
 
 | Pasta | O que tem |
 |---|---|
-| `Source/dsp/` | Motor de som, sem interface. `SignalChain` monta a cadeia; `AmpModel` guarda e troca a captura NAM; `DropTuner` faz o pitch shift. Compilado como a biblioteca `pedal_dsp`, usada pelo plugin e pelos testes. |
+| `Source/dsp/` | Motor de som, sem interface. `SignalChain` monta a cadeia; `AmpModel` guarda e troca a captura NAM; `DropTuner` faz o pitch shift (usando `SpliceShifter` ou o Signalsmith Stretch). Compilado como a biblioteca `pedal_dsp`, usada pelo plugin e pelos testes. |
 | `Source/ui/` | Visual compartilhado (`PedalLookAndFeel`, paleta de cores). |
 | `Source/PluginProcessor.*` | Parâmetros (APVTS), estado salvo, ligação entre parâmetros e `SignalChain`. |
 | `Source/PluginEditor.*` | Tela principal. |
-| `Tests/` | Teste do motor sem interface (`EngineSmokeTest`). |
+| `Tests/` | Teste do motor sem interface (`EngineSmokeTest`) e `DropCompare`, que gera áudios dos dois modos do drop. |
 
 ## Frentes de trabalho que podem andar em paralelo
 
@@ -63,9 +63,17 @@ struct ToneRef
 
 ### 4. Qualidade e latência do drop (`Source/dsp/DropTuner.*`, branch `feat/drop-tuner`)
 
-- Hoje: Signalsmith Stretch com janela de 30 ms (≈30 ms de latência quando ligado).
-- Medir com guitarra e baixo reais; testar janelas menores e alternativas de
-  baixa latência; talvez um modo "qualidade" e outro "latência mínima".
+- Dois motores, escolhidos pelo parâmetro `dropMode`:
+  - **Rápido** (`SpliceShifter`, domínio do tempo): linha de atraso lida em outra
+    velocidade; os saltos são escolhidos por correlação para cair num período
+    da nota. Atraso médio de 7 a 10 ms em notas, 15 ms em acordes, 19 ms em
+    baixo (varia o tempo todo; o host recebe 13 ms).
+  - **Suave** (Signalsmith Stretch): janela de 60 ms com formato assimétrico
+    (0.7), 18 ms fixos. O `CMakeLists.txt` gera uma cópia do header com o
+    parâmetro de assimetria, que a API original não expõe.
+- Trocar de modo com o drop ligado faz crossfade depois que o motor novo encheu.
+- Próximo passo: ouvir com guitarra e baixo reais (`DropCompare`) e ajustar as
+  constantes de `SpliceShifter.h` (limiares de correlação e tamanhos de salto).
 
 ### 5. iPad (depois das frentes 1 a 3)
 
