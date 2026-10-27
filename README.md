@@ -18,7 +18,10 @@ tocar ao vivo.
 - **Modo de teste sem interface:** toca uma gravação limpa (DI) de guitarra ou
   baixo em loop pela cadeia, para ouvir capturas e o drop pelo fone ou pela
   caixa do computador.
-- Medidor de CPU e aviso quando a captura foi treinada em outra taxa de amostragem.
+- Conversão automática de taxa de amostragem: capturas de 48 kHz soam certas em
+  interfaces que só rodam em 44,1 kHz (como a M-VAVE MK-300), usando o mesmo
+  resampler do plugin oficial do NAM.
+- Medidor de CPU.
 - Formatos: Standalone e VST3 (Windows/Mac/Linux) e AU (Mac).
 
 ## Baixar pronto (sem compilar)

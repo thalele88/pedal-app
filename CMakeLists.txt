@@ -35,12 +35,21 @@ FetchContent_Declare(eigen
     GIT_TAG bc3b39870ecb690a623a3f49149a358b95c5781d # NAM v0.6.0's submodule pin
     SOURCE_SUBDIR do-not-add)
 
+# Only the resampler from AudioDSPTools (the same one the official NAM plugin
+# uses); it is header-only, so nothing is built from this package.
+FetchContent_Declare(audio_dsp_tools
+    GIT_REPOSITORY https://github.com/sdatkinson/AudioDSPTools.git
+    GIT_TAG v0.2.0
+    GIT_SHALLOW ON
+    GIT_SUBMODULES ""
+    SOURCE_SUBDIR do-not-add)
+
 FetchContent_Declare(signalsmith_stretch
     GIT_REPOSITORY https://github.com/Signalsmith-Audio/signalsmith-stretch.git
     GIT_TAG 1.4.0
     GIT_SHALLOW ON)
 
-FetchContent_MakeAvailable(juce nam eigen signalsmith_stretch)
+FetchContent_MakeAvailable(juce nam eigen audio_dsp_tools signalsmith_stretch)
 
 # --- NAM core -----------------------------------------------------------------
 file(GLOB NAM_SOURCES "${nam_SOURCE_DIR}/NAM/*.cpp" "${nam_SOURCE_DIR}/NAM/*/*.cpp")
@@ -65,9 +74,11 @@ set_target_properties(nam_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(pedal_dsp STATIC
     Source/dsp/AmpModel.cpp
     Source/dsp/DropTuner.cpp
+    Source/dsp/ResampledModel.cpp
     Source/dsp/SignalChain.cpp
     Source/dsp/TestInputPlayer.cpp)
 target_include_directories(pedal_dsp PUBLIC Source)
+target_include_directories(pedal_dsp SYSTEM PRIVATE "${audio_dsp_tools_SOURCE_DIR}")
 # NAM registers its model architectures from static initialisers, so the whole
 # archive must be linked or the linker drops them and every model fails to load.
 target_link_libraries(pedal_dsp

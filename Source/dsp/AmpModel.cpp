@@ -2,6 +2,7 @@
 
 #include "NAM/dsp.h"
 #include "NAM/get_dsp.h"
+#include "dsp/ResampledModel.h"
 
 namespace pedal
 {
@@ -70,6 +71,8 @@ juce::String AmpModel::install (std::unique_ptr<nam::DSP> model, const juce::Str
 {
     if (model == nullptr)
         return juce::String::fromUTF8 ("Modelo inválido");
+
+    model = runAtAnySampleRate (std::move (model));
 
     if (model->NumInputChannels() != 1 || model->NumOutputChannels() != 1)
         return juce::String::fromUTF8 ("Só modelos mono são suportados por enquanto");
