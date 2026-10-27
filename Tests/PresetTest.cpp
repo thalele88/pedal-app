@@ -18,6 +18,13 @@ void check (bool condition, const juce::String& what)
         ++failures;
 }
 
+// Parameter values go through 0..1 and the step snapping, so they come back
+// within float rounding of what was set, not bit-for-bit (differs per platform).
+bool near (float a, float b)
+{
+    return std::abs (a - b) < 1.0e-3f;
+}
+
 // Runs the message loop (timers, async callbacks) until `done` or the timeout.
 template <typename Fn>
 bool pumpUntil (Fn done, int timeoutMs = 10000)
@@ -224,8 +231,9 @@ void testManager (const juce::File& root)
     std::printf ("preloaded preset switch took %.2f ms\n", ms);
     check (chain.getAmp().getModelName() == "A2", "preloaded capture is installed at once");
     check (ms < 20.0, "preloaded switch is fast");
-    check (proc.get ("inputGain") == 3.0f && proc.get ("drop") == -2.0f && proc.get ("cabEnabled") > 0.5f,
-           "knobs follow the preset, missing ones go to default");
+    check (near (proc.get ("inputGain"), 3.0f) && near (proc.get ("drop"), -2.0f) && proc.get ("cabEnabled") > 0.5f,
+           "knobs follow the preset, missing ones go to default (inputGain " + juce::String (proc.get ("inputGain"), 4)
+               + ", drop " + juce::String (proc.get ("drop"), 4) + ")");
     check (playBlocks (chain), "audio is fine after switch");
     check (manager.getCurrentIndex() == 1 && ! manager.isModified(), "current preset, not modified");
 
@@ -237,8 +245,9 @@ void testManager (const juce::File& root)
     midi.addEvent (juce::MidiMessage::programChange (1, 0), 0);
     manager.handleMidi (midi);
     check (pumpUntil ([&] { return manager.getCurrentIndex() == 0; }, 2000), "Program Change selects the preset");
-    check (chain.getAmp().getModelName() == "wavenet" && proc.get ("inputGain") == -6.0f && proc.get ("drop") == 0.0f,
-           "Program Change loads amp and knobs");
+    check (chain.getAmp().getModelName() == "wavenet" && near (proc.get ("inputGain"), -6.0f) && near (proc.get ("drop"), 0.0f),
+           "Program Change loads amp and knobs (" + chain.getAmp().getModelName() + ", inputGain "
+               + juce::String (proc.get ("inputGain"), 4) + ")");
 
     manager.setMidiChannel (2);
     midi.clear();
