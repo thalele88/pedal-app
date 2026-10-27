@@ -31,25 +31,47 @@ void AmpModel::prepare (double newSampleRate, int newMaxBlockSize)
         pending->Reset (sampleRate, maxBlockSize);
 }
 
+LoadedModel::LoadedModel() = default;
+LoadedModel::~LoadedModel() = default;
+
 juce::String AmpModel::load (const juce::File& namFile)
 {
+    juce::String error;
+    auto model = build (namFile, error);
+    return model != nullptr ? install (std::move (model)) : error;
+}
+
+juce::String AmpModel::loadFromJson (const juce::String& namJson, const juce::String& displayName)
+{
+    juce::String error;
+    auto model = buildFromJson (namJson, displayName, error);
+    return model != nullptr ? install (std::move (model)) : error;
+}
+
+std::unique_ptr<LoadedModel> AmpModel::build (const juce::File& namFile, juce::String& error) const
+{
     if (! namFile.existsAsFile())
-        return juce::String::fromUTF8 ("Arquivo não encontrado: ") + namFile.getFullPathName();
+    {
+        error = juce::String::fromUTF8 ("Arquivo não encontrado: ") + namFile.getFullPathName();
+        return nullptr;
+    }
 
     try
     {
         nam::DspLoadOptions options;
-        options.prewarm = false; // prewarmed in install() at the right sample rate
+        options.prewarm = false; // prewarmed in finishBuild() at the right sample rate
         auto model = nam::get_dsp (std::filesystem::path (namFile.getFullPathName().toStdString()), options);
-        return install (std::move (model), namFile.getFileNameWithoutExtension());
+        return finishBuild (std::move (model), namFile.getFileNameWithoutExtension(), error);
     }
     catch (const std::exception& e)
     {
-        return juce::String (juce::String::fromUTF8 ("Não foi possível carregar o modelo: ")) + e.what();
+        error = juce::String (juce::String::fromUTF8 ("Não foi possível carregar o modelo: ")) + e.what();
+        return nullptr;
     }
 }
 
-juce::String AmpModel::loadFromJson (const juce::String& namJson, const juce::String& displayName)
+std::unique_ptr<LoadedModel> AmpModel::buildFromJson (const juce::String& namJson, const juce::String& displayName,
+                                                      juce::String& error) const
 {
     try
     {
@@ -58,42 +80,91 @@ juce::String AmpModel::loadFromJson (const juce::String& namJson, const juce::St
         auto json = nlohmann::json::parse (namJson.toStdString());
         nam::dspData returnedConfig;
         auto model = nam::get_dsp (json, returnedConfig, options);
-        return install (std::move (model), displayName);
+        return finishBuild (std::move (model), displayName, error);
     }
     catch (const std::exception& e)
     {
-        return juce::String (juce::String::fromUTF8 ("Não foi possível carregar o modelo: ")) + e.what();
+        error = juce::String (juce::String::fromUTF8 ("Não foi possível carregar o modelo: ")) + e.what();
+        return nullptr;
     }
 }
 
-juce::String AmpModel::install (std::unique_ptr<nam::DSP> model, const juce::String& name)
+std::unique_ptr<LoadedModel> AmpModel::finishBuild (std::unique_ptr<nam::DSP> model, const juce::String& name,
+                                                    juce::String& error) const
 {
     if (model == nullptr)
-        return juce::String::fromUTF8 ("Modelo inválido");
+    {
+        error = juce::String::fromUTF8 ("Modelo inválido");
+        return nullptr;
+    }
 
     if (model->NumInputChannels() != 1 || model->NumOutputChannels() != 1)
-        return juce::String::fromUTF8 ("Só modelos mono são suportados por enquanto");
+    {
+        error = juce::String::fromUTF8 ("Só modelos mono são suportados por enquanto");
+        return nullptr;
+    }
+
+    std::unique_ptr<LoadedModel> loaded (new LoadedModel());
+    {
+        std::lock_guard<std::mutex> lock (loadMutex);
+        loaded->preparedSampleRate = sampleRate;
+        loaded->preparedBlockSize = maxBlockSize;
+    }
+
+    // Prewarming is the slow part, so it runs outside the lock; install()
+    // prewarms again if prepare() changed the sample rate in the meantime.
+    model->SetPrewarmOnReset (true);
+    model->Reset (loaded->preparedSampleRate, loaded->preparedBlockSize);
+
+    loaded->dsp = std::move (model);
+    loaded->name = name;
+    return loaded;
+}
+
+juce::String AmpModel::install (std::unique_ptr<LoadedModel> model)
+{
+    if (model == nullptr || model->dsp == nullptr)
+        return juce::String::fromUTF8 ("Modelo inválido");
 
     std::lock_guard<std::mutex> lock (loadMutex);
 
-    const auto expected = model->GetExpectedSampleRate();
-    const bool mismatch = expected > 0 && std::abs (expected - sampleRate) > 1.0
-                          && ! model->SupportsArbitrarySampleRate();
+    if (! juce::exactlyEqual (model->preparedSampleRate, sampleRate) || model->preparedBlockSize != maxBlockSize)
+    {
+        model->dsp->Reset (sampleRate, maxBlockSize);
+        model->preparedSampleRate = sampleRate;
+        model->preparedBlockSize = maxBlockSize;
+    }
 
-    model->SetPrewarmOnReset (true);
-    model->Reset (sampleRate, maxBlockSize);
+    const auto expected = model->dsp->GetExpectedSampleRate();
+    const bool mismatch = expected > 0 && std::abs (expected - sampleRate) > 1.0
+                          && ! model->dsp->SupportsArbitrarySampleRate();
 
     collectGarbage();
+    unloadRequested = false;
     // If the audio thread has not picked up a previous load yet, replace it.
-    delete incoming.exchange (model.release());
+    delete incoming.exchange (model->dsp.release());
 
     {
         std::lock_guard<std::mutex> nameLock (nameMutex);
-        modelName = name;
+        modelName = model->name;
     }
     modelLoaded = true;
     sampleRateMismatch = mismatch;
     return {};
+}
+
+void AmpModel::unload()
+{
+    std::lock_guard<std::mutex> lock (loadMutex);
+    delete incoming.exchange (nullptr);
+    unloadRequested = true;
+
+    {
+        std::lock_guard<std::mutex> nameLock (nameMutex);
+        modelName = {};
+    }
+    modelLoaded = false;
+    sampleRateMismatch = false;
 }
 
 void AmpModel::process (float* samples, int numSamples) noexcept
@@ -112,14 +183,21 @@ void AmpModel::process (float* samples, int numSamples) noexcept
             previous.reset (active.release());
             active.reset (next);
         }
+        else if (unloadRequested.exchange (false, std::memory_order_acq_rel))
+        {
+            previous.reset (active.release());
+        }
     }
 
-    if (active == nullptr)
+    if (active == nullptr && previous == nullptr)
         return;
 
     float* input = samples;
     float* output = outBuffer.get();
-    active->process (&input, &output, numSamples);
+    if (active != nullptr)
+        active->process (&input, &output, numSamples);
+    else
+        std::copy (samples, samples + numSamples, output); // fading out to the dry signal
 
     if (previous != nullptr)
     {

@@ -11,6 +11,26 @@ namespace nam { class DSP; }
 namespace pedal
 {
 
+// A NAM model that has been read, built and prewarmed off the audio thread,
+// ready for AmpModel::install(). Building is the slow part of a load, so the
+// preset system builds these ahead of time and a preset switch is only a
+// pointer swap.
+class LoadedModel
+{
+public:
+    ~LoadedModel();
+    const juce::String& getName() const noexcept { return name; }
+
+private:
+    friend class AmpModel;
+    LoadedModel();
+
+    std::unique_ptr<nam::DSP> dsp;
+    juce::String name;
+    double preparedSampleRate = 0.0;
+    int preparedBlockSize = 0;
+};
+
 // Holds one NAM model and swaps it in without blocking the audio thread.
 //
 // Threads:
@@ -34,6 +54,18 @@ public:
     // Same as load() but from the JSON text of a .nam file (used for downloads).
     juce::String loadFromJson (const juce::String& namJson, const juce::String& displayName);
 
+    // The two halves of a load, for callers that build models ahead of time.
+    // build*() run on any non-audio thread and return nullptr with `error` set
+    // on failure. install() is cheap when the model was built at the current
+    // sample rate and block size; otherwise it prewarms the model again.
+    std::unique_ptr<LoadedModel> build (const juce::File& namFile, juce::String& error) const;
+    std::unique_ptr<LoadedModel> buildFromJson (const juce::String& namJson, const juce::String& displayName,
+                                                juce::String& error) const;
+    juce::String install (std::unique_ptr<LoadedModel> model);
+
+    // Fades out the current model; the signal then passes through untouched.
+    void unload();
+
     // Mono, in place. With no model loaded the signal passes through untouched.
     void process (float* samples, int numSamples) noexcept;
 
@@ -46,13 +78,15 @@ public:
     bool hasSampleRateMismatch() const noexcept { return sampleRateMismatch.load(); }
 
 private:
-    juce::String install (std::unique_ptr<nam::DSP> model, const juce::String& name);
+    std::unique_ptr<LoadedModel> finishBuild (std::unique_ptr<nam::DSP> model, const juce::String& name,
+                                              juce::String& error) const;
 
     std::unique_ptr<nam::DSP> active;           // audio thread only
     std::atomic<nam::DSP*> incoming { nullptr }; // loader -> audio thread
     std::atomic<nam::DSP*> retired { nullptr };  // audio thread -> collector
+    std::atomic<bool> unloadRequested { false };  // loader -> audio thread
 
-    std::mutex loadMutex; // serialises loaders and prepare(), never taken by audio
+    mutable std::mutex loadMutex; // serialises loaders and prepare(), never taken by audio
     double sampleRate = 48000.0;
     int maxBlockSize = 512;
 

@@ -4,6 +4,7 @@
 
 #include "dsp/SignalChain.h"
 #include "dsp/TestInputPlayer.h"
+#include "presets/PresetManager.h"
 
 namespace ParamIDs
 {
@@ -57,7 +58,9 @@ public:
 
     juce::String getAmpModelName() const { return chain.getAmp().getModelName(); }
     bool ampHasSampleRateMismatch() const { return chain.getAmp().hasSampleRateMismatch(); }
-    juce::File getCabinetFile() const { return cabinetFile; }
+    juce::File getCabinetFile() const { return presets.getCurrentIr(); }
+
+    pedal::PresetManager& getPresets() noexcept { return presets; }
 
     // 0..1 share of the audio callback time used by this plugin.
     double getCpuLoad() const { return loadMeasurer.getLoadAsProportion(); }
@@ -70,11 +73,11 @@ private:
     void updateLatency();
 
     pedal::SignalChain chain;
+    pedal::PresetManager presets { parameters, chain };
     pedal::TestInputPlayer testInput;
     juce::AudioProcessLoadMeasurer loadMeasurer;
     juce::ThreadPool loaderPool { 1 };
 
-    juce::File ampModelFile, cabinetFile;
     // Lets callbacks posted by the loader know the processor is gone.
     std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>> (true);
 
