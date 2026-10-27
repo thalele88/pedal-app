@@ -157,7 +157,7 @@ ControlStrip::ControlStrip (PedalAudioProcessor& p, PitchParams& pitchParams, st
     : processor (p), pitch (pitchParams), showStatus (std::move (status)),
       input (p.parameters, ParamIDs::inputGain, "Input"),
       gate (p.parameters, ParamIDs::gateThreshold, "Gate"),
-      pitchKnob (p.parameters, pitchParams.amount != nullptr ? pitchParams.amount->getParameterID() : juce::String (ParamIDs::drop), "Pitch"),
+      pitchKnob (p.parameters, pitchParams.amount->getParameterID(), "Pitch"), // "pitch" or the old "drop"
       bass (p.parameters, ParamIDs::bass, "Bass"),
       middle (p.parameters, ParamIDs::middle, "Middle"),
       treble (p.parameters, ParamIDs::treble, "Treble"),
