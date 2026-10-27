@@ -151,6 +151,35 @@ int main()
         check (channelsMatch, "DI test input fills every channel");
     }
 
+    // EQ: flat leaves the sound alone, +12 dB of bass makes a low note about 4x louder.
+    {
+        auto rmsAt = [&] (float bassDb, bool eqOn)
+        {
+            pedal::SignalChain eqChain; // no amp loaded = the amp passes the signal through
+            eqChain.prepare (sampleRate, blockSize);
+            pedal::ChainSettings eqSettings;
+            eqSettings.eqEnabled = eqOn;
+            eqSettings.bassDb = bassDb;
+            juce::AudioBuffer<float> b (1, blockSize);
+            double sum = 0.0;
+            int64_t n = 0;
+            for (int blk = 0; blk < 200; ++blk)
+            {
+                for (int i = 0; i < blockSize; ++i)
+                    b.setSample (0, i, 0.1f * (float) std::sin (juce::MathConstants<double>::twoPi * 60.0 * (double) (n + i) / sampleRate));
+                n += blockSize;
+                eqChain.process (b, eqSettings);
+                if (blk >= 100)
+                    for (int i = 0; i < blockSize; ++i)
+                        sum += b.getSample (0, i) * b.getSample (0, i);
+            }
+            return std::sqrt (sum / (100.0 * blockSize));
+        };
+        const double off = rmsAt (0.0f, false), flat = rmsAt (0.0f, true), boosted = rmsAt (12.0f, true);
+        check (std::abs (flat / off - 1.0) < 0.01, "EQ at 5/5/5 does not change the sound");
+        check (boosted / off > 3.0 && boosted / off < 4.5, ("EQ bass +12 dB on 60 Hz gives x" + juce::String (boosted / off, 2)).toRawUTF8());
+    }
+
     // Tuner: low B of a 5-string bass up to the 24th fret of the high E string.
     // Open strings must read within 1 cent; high frets have fewer samples per
     // period after decimation, so they get a little more room.

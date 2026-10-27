@@ -1,6 +1,15 @@
 #include "ui/StageView.h"
 
-#include "ui/BlockPanels.h"
+namespace
+{
+constexpr int dropShortcuts[] = { 0, -1, -2, -3, -4, -5, -7, -12 };
+
+juce::String dropName (float semitones)
+{
+    const int st = juce::roundToInt (semitones);
+    return st == 0 ? pedal::ui::tr ("Padrão") : (st > 0 ? "+" : "") + juce::String (st);
+}
+} // namespace
 
 namespace pedal::ui
 {
@@ -88,7 +97,8 @@ private:
 };
 
 //==============================================================================
-StageView::StageView (PedalAudioProcessor& p, PresetSource& source) : processor (p), presets (source)
+StageView::StageView (PresetSource& source, PitchParams& pitchParams)
+    : presets (source), pitch (pitchParams)
 {
     setWantsKeyboardFocus (true);
 
@@ -105,7 +115,7 @@ StageView::StageView (PedalAudioProcessor& p, PresetSource& source) : processor 
     for (int st : dropShortcuts)
     {
         auto* b = dropButtons.add (new juce::TextButton (dropName (st)));
-        b->onClick = [this, st] { setParameter (processor.parameters, ParamIDs::drop, (float) st); };
+        b->onClick = [this, st] { pitch.selectShortcut (st); };
         b->setTriggeredOnMouseDown (true);
         addAndMakeVisible (b);
     }
@@ -192,7 +202,7 @@ void StageView::setSlotsPerBank (int count)
 
 void StageView::refresh()
 {
-    const int drop = juce::roundToInt (getParameter (processor.parameters, ParamIDs::drop));
+    const int drop = juce::roundToInt (pitch.getEffectiveSemitones());
     for (int i = 0; i < dropButtons.size(); ++i)
         dropButtons[i]->setToggleState (dropShortcuts[i] == drop, juce::dontSendNotification);
 

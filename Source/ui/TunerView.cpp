@@ -1,5 +1,7 @@
 #include "ui/TunerView.h"
 
+#include "ui/PitchParams.h"
+
 namespace pedal::ui
 {
 
@@ -192,7 +194,7 @@ void TunerView::paint (juce::Graphics& g)
                                 : tr ("Toque uma corda");
     g.drawText (detail, area.removeFromTop (40), juce::Justification::centred);
 
-    const int drop = juce::roundToInt (getParameter (processor.parameters, ParamIDs::drop));
+    const int drop = juce::roundToInt (PitchParams (processor.parameters).getEffectiveSemitones());
     if (drop != 0)
     {
         g.setFont (juce::FontOptions (16.0f));

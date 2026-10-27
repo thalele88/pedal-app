@@ -97,9 +97,10 @@ juce_add_plugin(PedalApp
 target_sources(PedalApp PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
-    Source/ui/BlockPanels.cpp
+    Source/ui/BlockDetailView.cpp
+    Source/ui/ChainView.cpp
+    Source/ui/ControlStrip.cpp
     Source/ui/PresetBrowser.cpp
-    Source/ui/SignalChainView.cpp
     Source/ui/StageView.cpp
     Source/ui/TunerView.cpp)
 

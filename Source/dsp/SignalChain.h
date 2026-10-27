@@ -18,10 +18,12 @@ struct ChainSettings
     float cleanBlend = 0.0f;         // 0..1, mostly for bass: keeps the low end clean
     float outputGainDb = 0.0f;
     bool cabEnabled = true;
+    bool eqEnabled = true;
+    float bassDb = 0.0f, middleDb = 0.0f, trebleDb = 0.0f; // -12..+12
 };
 
 // Signal flow (mono inside, copied to every output channel):
-//   input gain -> gate -> drop tuner -> NAM amp -> cab IR -> clean blend -> output gain
+//   input gain -> gate -> drop tuner -> NAM amp -> cab IR -> EQ -> clean blend -> output gain
 class SignalChain
 {
 public:
@@ -44,6 +46,13 @@ private:
     DropTuner dropTuner;
     juce::dsp::NoiseGate<float> gate;
     juce::dsp::Convolution cabinet { juce::dsp::Convolution::NonUniform { 256 } };
+
+    // Bass / middle / treble. Coefficients are recomputed in place (no
+    // allocation) only when a knob moves.
+    void updateEq (const ChainSettings&) noexcept;
+    juce::dsp::IIR::Filter<float> bass, middle, treble;
+    float eqState[3] { 1000.0f, 1000.0f, 1000.0f }; // last applied dB values
+    double eqSampleRate = 48000.0;
     juce::AudioBuffer<float> monoBuffer, cleanBuffer;
     juce::SmoothedValue<float> inputGain, outputGain, blend;
     std::atomic<bool> cabLoaded { false };

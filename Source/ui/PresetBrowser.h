@@ -19,6 +19,9 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    // Asks for a name and saves the current sound as a new preset.
+    void askNameAndSave();
+
 private:
     int getNumRows() override { return visible.size(); }
     void paintListBoxItem (int row, juce::Graphics&, int width, int height, bool selected) override;
@@ -26,7 +29,6 @@ private:
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
 
     void rebuild();
-    void askNameAndSave();
 
     PresetSource& source;
     juce::Array<int> visible; // indices into the source after filtering

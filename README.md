@@ -61,10 +61,18 @@ rápido que tempo real.
    buffer de 64 ou 128 amostras.
 2. O JUCE silencia a entrada na primeira vez para evitar microfonia: desmarque
    "Mute audio input" na mesma tela.
-3. Toque num bloco da cadeia (**ENTRADA → GATE → DROP → AMP → CAIXA → SAÍDA**)
-   para ver os controles dele embaixo. O LED verde liga e desliga o bloco.
-   Em **AMP** escolha um `.nam`; em **CAIXA**, um IR.
-4. Monte o som e toque em **Salvar como...** na lista de presets à esquerda.
+3. Na **cadeia de sinal**, toque no card **+ Adicionar amp** e escolha um `.nam`,
+   e em **+ Adicionar caixa** escolha um IR (ou arraste os arquivos para a janela).
+   Tocar num card já preenchido abre a tela do bloco, com setas para comparar as
+   outras capturas da mesma pasta.
+4. Na barra de baixo ficam os controles gerais: **Input**, **Gate**, **Pitch**
+   (o drop de afinação; clique com o botão direito ou em `•••` para os atalhos),
+   **Bass / Middle / Treble** e **Output**. Os botões de power desligam sem perder
+   o ajuste. Os medidores nos cantos mostram o nível de entrada e de saída, e a
+   barra de dicas no rodapé explica o que cada controle faz.
+5. Monte o som e toque no **+** do topo (ou em **Salvar como...**) para criar um preset.
+
+![Tela do bloco](docs/block.png)
 
 ### Modo palco
 
@@ -93,13 +101,12 @@ do drop, então afine o instrumento normal.
    sem amp nem efeito) em `.wav`, `.aif` ou `.flac`. Muitos sites de captura e
    fóruns de NAM oferecem DIs grátis para teste; qualquer faixa DI de multitrack
    também serve.
-2. Abra o standalone, toque no bloco **ENTRADA**, clique em **Arquivo DI...** e
-   escolha o arquivo. Ele começa a tocar em loop; **Tocar DI / Parar DI** liga e
-   desliga.
+2. Abra o standalone, clique no botão **DI** ao lado do knob Input, em **Escolher arquivo...** e
+   escolha o arquivo. Ele começa a tocar em loop; o mesmo botão **DI** toca e para.
 3. Em **Options → Audio/MIDI Settings**, deixe a saída nos fones ou alto-falantes
    do computador. A entrada pode ficar em qualquer coisa: com o DI tocando, ela
    é ignorada.
-4. Carregue uma captura no bloco **AMP** e troque a afinação no bloco **DROP** para
+4. Carregue uma captura no card do amp e ligue o **Pitch** na barra de baixo para
    ouvir o drop.
 
 ## Limitações conhecidas

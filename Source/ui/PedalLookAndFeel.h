@@ -44,7 +44,7 @@ public:
     }
 
     void drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float pos,
-                           float startAngle, float endAngle, juce::Slider&) override
+                           float startAngle, float endAngle, juce::Slider& slider) override
     {
         const auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (6.0f);
         const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) / 2.0f;
@@ -58,7 +58,9 @@ public:
         g.strokePath (background, juce::PathStrokeType (track, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
         juce::Path value;
-        value.addCentredArc (centre.x, centre.y, radius - track, radius - track, 0.0f, startAngle, angle, true);
+        // Bipolar knobs (pitch, EQ, gain) light up from the middle, so "no change" looks empty.
+        const float from = slider.getProperties()["bipolar"] ? (startAngle + endAngle) * 0.5f : startAngle;
+        value.addCentredArc (centre.x, centre.y, radius - track, radius - track, 0.0f, juce::jmin (from, angle), juce::jmax (from, angle), true);
         g.setColour (Colours::accent);
         g.strokePath (value, juce::PathStrokeType (track, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 

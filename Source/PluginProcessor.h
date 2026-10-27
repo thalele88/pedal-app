@@ -15,6 +15,11 @@ namespace ParamIDs
     inline constexpr auto cleanBlend = "cleanBlend";
     inline constexpr auto outputGain = "outputGain";
     inline constexpr auto cabEnabled = "cabEnabled";
+    inline constexpr auto gateEnabled = "gateEnabled";
+    inline constexpr auto bass = "bass";      // 0..10, 5 = flat
+    inline constexpr auto middle = "middle";
+    inline constexpr auto treble = "treble";
+    inline constexpr auto eqEnabled = "eqEnabled";
 }
 
 class PedalAudioProcessor : public juce::AudioProcessor,
@@ -59,7 +64,12 @@ public:
 
     juce::String getAmpModelName() const { return chain.getAmp().getModelName(); }
     bool ampHasSampleRateMismatch() const { return chain.getAmp().hasSampleRateMismatch(); }
+    juce::File getAmpModelFile() const { return ampModelFile; }
     juce::File getCabinetFile() const { return cabinetFile; }
+
+    // Peak levels since the last call (0..1+), for the meters. Message thread only.
+    float takeInputPeak() noexcept { return inputPeak.exchange (0.0f); }
+    float takeOutputPeak() noexcept { return outputPeak.exchange (0.0f); }
 
     // 0..1 share of the audio callback time used by this plugin.
     double getCpuLoad() const { return loadMeasurer.getLoadAsProportion(); }
@@ -99,6 +109,12 @@ private:
     std::atomic<float>* cleanBlend = nullptr;
     std::atomic<float>* outputGain = nullptr;
     std::atomic<float>* cabEnabled = nullptr;
+    std::atomic<float>* gateEnabled = nullptr;
+    std::atomic<float>* bass = nullptr;
+    std::atomic<float>* middle = nullptr;
+    std::atomic<float>* treble = nullptr;
+    std::atomic<float>* eqEnabled = nullptr;
+    std::atomic<float> inputPeak { 0.0f }, outputPeak { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PedalAudioProcessor)
 };

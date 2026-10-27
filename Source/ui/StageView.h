@@ -1,6 +1,6 @@
 #pragma once
 
-#include "PluginProcessor.h"
+#include "ui/PitchParams.h"
 #include "ui/PresetSource.h"
 #include "ui/Widgets.h"
 
@@ -20,7 +20,7 @@ class StageView : public juce::Component,
                   private juce::ChangeListener
 {
 public:
-    StageView (PedalAudioProcessor&, PresetSource&);
+    StageView (PresetSource&, PitchParams&);
     ~StageView() override;
 
     std::function<void()> onExit;
@@ -46,8 +46,8 @@ private:
     void selectSlot (int slot);
     void setSlotsPerBank (int);
 
-    PedalAudioProcessor& processor;
     PresetSource& presets;
+    PitchParams& pitch;
 
     int slotsPerBank = 4;
     int bank = 0;

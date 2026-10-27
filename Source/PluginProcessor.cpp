@@ -13,6 +13,11 @@ PedalAudioProcessor::PedalAudioProcessor()
     cleanBlend = parameters.getRawParameterValue (ParamIDs::cleanBlend);
     outputGain = parameters.getRawParameterValue (ParamIDs::outputGain);
     cabEnabled = parameters.getRawParameterValue (ParamIDs::cabEnabled);
+    gateEnabled = parameters.getRawParameterValue (ParamIDs::gateEnabled);
+    bass = parameters.getRawParameterValue (ParamIDs::bass);
+    middle = parameters.getRawParameterValue (ParamIDs::middle);
+    treble = parameters.getRawParameterValue (ParamIDs::treble);
+    eqEnabled = parameters.getRawParameterValue (ParamIDs::eqEnabled);
 
     // Frees replaced models off the audio thread and keeps latency in sync.
     startTimerHz (10);
@@ -37,10 +42,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout PedalAudioProcessor::createP
         AudioParameterFloatAttributes().withStringFromValueFunction (db)));
 
     layout.add (std::make_unique<AudioParameterFloat> (
-        ParameterID { ParamIDs::gateThreshold, 1 }, "Gate", NormalisableRange<float> (-100.0f, 0.0f, 0.5f), -100.0f,
-        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) {
-            return v <= -99.0f ? String ("Desligado") : String (v, 1) + " dB";
-        })));
+        ParameterID { ParamIDs::gateThreshold, 1 }, "Gate", NormalisableRange<float> (-100.0f, 0.0f, 0.5f), -60.0f,
+        AudioParameterFloatAttributes().withStringFromValueFunction (db)));
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { ParamIDs::gateEnabled, 1 }, "Gate ligado", false));
 
     layout.add (std::make_unique<AudioParameterInt> (
         ParameterID { ParamIDs::drop, 1 }, juce::String::fromUTF8 ("Afinação"), -12, 12, 0,
@@ -59,6 +63,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout PedalAudioProcessor::createP
         AudioParameterFloatAttributes().withStringFromValueFunction (db)));
 
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { ParamIDs::cabEnabled, 1 }, "Caixa", true));
+
+    // Tone stack on a 0..10 scale like an amp; 5 is flat, each step is 2.4 dB.
+    auto tone = [] (float v, int) { return String (v, 1); };
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { ParamIDs::bass, 1 }, "Graves", NormalisableRange<float> (0.0f, 10.0f, 0.1f), 5.0f,
+                                                       AudioParameterFloatAttributes().withStringFromValueFunction (tone)));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { ParamIDs::middle, 1 }, juce::String::fromUTF8 ("Médios"), NormalisableRange<float> (0.0f, 10.0f, 0.1f), 5.0f,
+                                                       AudioParameterFloatAttributes().withStringFromValueFunction (tone)));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { ParamIDs::treble, 1 }, "Agudos", NormalisableRange<float> (0.0f, 10.0f, 0.1f), 5.0f,
+                                                       AudioParameterFloatAttributes().withStringFromValueFunction (tone)));
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { ParamIDs::eqEnabled, 1 }, "EQ ligado", true));
 
     return layout;
 }
@@ -95,14 +109,24 @@ void PedalAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 
     pedal::ChainSettings settings;
     settings.inputGainDb = inputGain->load();
-    settings.gateThresholdDb = gateThreshold->load();
+    settings.gateThresholdDb = gateEnabled->load() > 0.5f ? gateThreshold->load() : -100.0f;
     settings.dropSemitones = juce::roundToInt (drop->load());
     settings.cleanBlend = cleanBlend->load();
     settings.outputGainDb = outputGain->load();
     settings.cabEnabled = cabEnabled->load() > 0.5f;
+    settings.eqEnabled = eqEnabled->load() > 0.5f;
+    settings.bassDb = (bass->load() - 5.0f) * 2.4f;
+    settings.middleDb = (middle->load() - 5.0f) * 2.4f;
+    settings.trebleDb = (treble->load() - 5.0f) * 2.4f;
 
     testInput.process (buffer);
     tuner.push (buffer.getReadPointer (0), buffer.getNumSamples());
+    auto storePeak = [] (std::atomic<float>& peak, float value)
+    {
+        if (value > peak.load (std::memory_order_relaxed))
+            peak.store (value, std::memory_order_relaxed);
+    };
+    storePeak (inputPeak, buffer.getMagnitude (0, 0, buffer.getNumSamples()));
     chain.process (buffer, settings);
 
     const bool muted = outputMuted.load();
@@ -120,6 +144,8 @@ void PedalAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     {
         buffer.clear();
     }
+
+    storePeak (outputPeak, buffer.getMagnitude (0, buffer.getNumSamples()));
 }
 
 void PedalAudioProcessor::loadAmpModelAsync (const juce::File& file, std::function<void (juce::String)> onDone)
